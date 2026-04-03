@@ -1,0 +1,150 @@
+---
+title: "Mobile integration"
+description: "Integrate whisper.cpp into iOS and Android apps for fully offline, on-device speech recognition."
+---
+
+whisper.cpp is designed to run efficiently on mobile hardware. All processing happens on-device — no network connection or cloud service is required.
+
+<Note>
+  For a demonstration of on-device performance, see the [whisper.objc](https://github.com/ggml-org/whisper.cpp/tree/master/examples/whisper.objc) example running on an iPhone 13 entirely offline.
+</Note>
+
+<Tabs>
+  <Tab title="iOS">
+
+    ## XCFramework
+
+    The XCFramework is a precompiled binary distribution of whisper.cpp for Apple platforms. It supports:
+
+    - iOS
+    - visionOS
+    - tvOS
+    - macOS
+
+    You can use the XCFramework in Swift projects without compiling the library from source.
+
+    ### Swift Package Manager
+
+    Add whisper.cpp to your `Package.swift` using a `binaryTarget` pointing to the precompiled XCFramework release:
+
+    ```swift
+    // swift-tools-version: 5.10
+
+    import PackageDescription
+
+    let package = Package(
+        name: "Whisper",
+        targets: [
+            .executableTarget(
+                name: "Whisper",
+                dependencies: [
+                    "WhisperFramework"
+                ]),
+            .binaryTarget(
+                name: "WhisperFramework",
+                url: "https://github.com/ggml-org/whisper.cpp/releases/download/v1.7.5/whisper-v1.7.5-xcframework.zip",
+                checksum: "c7faeb328620d6012e130f3d705c51a6ea6c995605f2df50f6e1ad68c59c6c4a"
+            )
+        ]
+    )
+    ```
+
+    <Note>
+      Replace the `url` and `checksum` values with the release version you want to use. Check the [releases page](https://github.com/ggml-org/whisper.cpp/releases) for the latest XCFramework download.
+    </Note>
+
+    Alternatively, use the `ggml-org/whisper.spm` Swift Package, which provides the same XCFramework distribution via the Swift Package Index.
+
+    ### Example apps
+
+    The repository includes two iOS example applications:
+
+    **whisper.objc** — An Objective-C iOS app demonstrating real-time transcription using the C API directly.
+
+    - Source: [`examples/whisper.objc`](https://github.com/ggml-org/whisper.cpp/tree/master/examples/whisper.objc)
+    - Uses the `whisper.h` C API
+    - Runs fully on-device with no network requirement
+
+    **whisper.swiftui** — A SwiftUI application for both iOS and macOS.
+
+    - Source: [`examples/whisper.swiftui`](https://github.com/ggml-org/whisper.cpp/tree/master/examples/whisper.swiftui)
+    - Demonstrates how to integrate whisper.cpp into a modern SwiftUI app
+    - Supports both iOS and macOS targets
+
+    ### SwiftWhisper (community)
+
+    [`exPHAT/SwiftWhisper`](https://github.com/exPHAT/SwiftWhisper) is a community Swift wrapper that provides a more idiomatic Swift API on top of the C bindings.
+
+  </Tab>
+  <Tab title="Android">
+
+    ## Android example app
+
+    The repository includes a complete Android example application that demonstrates on-device transcription.
+
+    - Source: [`examples/whisper.android`](https://github.com/ggml-org/whisper.cpp/tree/master/examples/whisper.android)
+    - Written in Kotlin with a standard Android project structure
+    - Uses the Java JNI bindings to call into the native whisper.cpp library
+    - Runs fully on-device with no network requirement
+
+    ## Java JNI bindings
+
+    The Android app uses Java bindings that are also available as a standalone library for Java and Android projects.
+
+    [`GiviMAD/whisper-jni`](https://github.com/GiviMAD/whisper-jni) provides Java JNI bindings that work on Android and desktop JVMs. The library handles loading the native shared library and exposes a Java API for transcription.
+
+    Low-level JNA bindings are also available in [`bindings/java`](https://github.com/ggml-org/whisper.cpp/tree/master/bindings/java) in the main repository.
+
+    ### Basic Java usage
+
+    ```java
+    import io.github.ggerganov.whispercpp.WhisperCpp;
+
+    public class Example {
+
+        public static void main(String[] args) {
+
+            WhisperCpp whisper = new WhisperCpp();
+            try {
+                whisper.initContext("models/ggml-base.en.bin");
+                WhisperFullParams.ByValue params =
+                    whisper.getFullDefaultParams(WhisperSamplingStrategy.WHISPER_SAMPLING_BEAM_SEARCH);
+
+                params.temperature = 0.0f;
+
+                float[] samples = readAudio(); // 16-bit PCM divided by 32767.0f
+                List<WhisperSegment> segments = whisper.fullTranscribeWithTime(params, samples);
+
+                for (WhisperSegment segment : segments) {
+                    System.out.println(segment.getSentence());
+                }
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                whisper.close();
+            }
+        }
+    }
+    ```
+
+    ### Building the Java bindings
+
+    Requires JDK 8 or higher:
+
+    ```bash
+    git clone https://github.com/ggml-org/whisper.cpp.git
+    cd whisper.cpp/bindings/java
+    ./gradlew build
+    ```
+
+  </Tab>
+</Tabs>
+
+## React Native
+
+For cross-platform React Native apps targeting both iOS and Android, use [`mybigday/whisper.rn`](https://github.com/mybigday/whisper.rn). This library wraps the native whisper.cpp binaries for both platforms and exposes a JavaScript API.
+
+<Note>
+  All mobile integrations run inference fully on-device. No audio data is sent to any external server.
+</Note>

@@ -1,0 +1,102 @@
+---
+title: "C API overview"
+description: "The whisper.h C interface — thread-safe usage, core types, constants, and the high-level transcription pattern."
+keywords: ["C API", "whisper.h", "whisper_context", "whisper_full", "transcription"]
+---
+
+The C API is declared in `whisper.h` and provides everything you need to load a model, run transcription, and read results. It is designed to be embedded in any application without external dependencies.
+
+## Thread safety
+
+The interface is thread-safe **as long as the same `whisper_context` is not used by multiple threads concurrently**. To run inference in parallel, allocate a separate `whisper_state` per thread using `whisper_init_state()`, then call `whisper_full_with_state()` from each thread.
+
+## High-level usage pattern
+
+Every whisper.cpp program follows the same four steps:
+
+<Steps>
+  <Step title="Initialize a context">
+    Load a model from disk or memory. Returns a `whisper_context *`.
+  </Step>
+  <Step title="Run inference">
+    Call `whisper_full()` with your PCM audio samples.
+  </Step>
+  <Step title="Read segments">
+    Iterate over the generated text segments with `whisper_full_n_segments()` and `whisper_full_get_segment_text()`.
+  </Step>
+  <Step title="Free resources">
+    Call `whisper_free()` when done.
+  </Step>
+</Steps>
+
+```c
+#include "whisper.h"
+
+// Initialize
+whisper_context_params cparams = whisper_context_default_params();
+struct whisper_context *ctx =
+    whisper_init_from_file_with_params("/path/to/ggml-base.en.bin", cparams);
+
+// Run inference (pcmf32 is a float[] of 16 kHz mono audio)
+struct whisper_full_params wparams =
+    whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+
+if (whisper_full(ctx, wparams, pcmf32, n_samples) != 0) {
+    fprintf(stderr, "failed to process audio\n");
+    return 1;
+}
+
+// Read results
+const int n_segments = whisper_full_n_segments(ctx);
+for (int i = 0; i < n_segments; ++i) {
+    const char *text = whisper_full_get_segment_text(ctx, i);
+    printf("%s", text);
+}
+
+// Cleanup
+whisper_free(ctx);
+```
+
+`pcmf32` must be **32-bit floating-point PCM** sampled at 16 000 Hz, mono. Values are expected in the range `[-1.0, 1.0]`.
+
+## Audio constants
+
+These constants describe the format whisper.cpp expects and the sizes of its internal signal-processing windows.
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `WHISPER_SAMPLE_RATE` | `16000` | Required input sample rate (Hz) |
+| `WHISPER_N_FFT` | `400` | FFT window size (samples) |
+| `WHISPER_HOP_LENGTH` | `160` | Hop length between FFT windows (samples) |
+| `WHISPER_CHUNK_SIZE` | `30` | Audio chunk size processed at a time (seconds) |
+
+## Core types
+
+### `whisper_context`
+
+An opaque struct that holds the loaded model weights and the default inference state. Obtained from one of the `whisper_init_*` functions and released with `whisper_free()`.
+
+### `whisper_state`
+
+An opaque struct that holds all per-inference state (KV cache, mel spectrogram buffer, results). Separating state from the context lets multiple threads share one set of weights while running independent inferences. Allocated with `whisper_init_state()` and released with `whisper_free_state()`.
+
+### `whisper_full_params`
+
+A plain struct that configures a single inference call. Covers decoding strategy, language, threading, callbacks, token timestamps, VAD integration, and more. Always initialize from `whisper_full_default_params()` before overriding individual fields.
+
+## API pages
+
+<CardGroup cols={2}>
+  <Card title="Context initialization" icon="box" href="/api/context">
+    Load models, configure GPU, and manage context lifetime.
+  </Card>
+  <Card title="Running inference" icon="play" href="/api/inference">
+    `whisper_full`, params struct, callbacks, and the low-level pipeline.
+  </Card>
+  <Card title="Reading results" icon="list" href="/api/results">
+    Segments, tokens, timestamps, probabilities, and timings.
+  </Card>
+  <Card title="Voice Activity Detection" icon="waveform" href="/api/vad">
+    Detect speech regions before transcription with the VAD API.
+  </Card>
+</CardGroup>

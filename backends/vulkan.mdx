@@ -1,0 +1,80 @@
+---
+title: "Vulkan GPU"
+description: "Accelerate whisper.cpp on any Vulkan-capable GPU, including AMD, Intel, and NVIDIA. Also covers Moore Threads MUSA support."
+keywords: ["Vulkan", "GPU", "AMD", "Intel", "cross-vendor", "Moore Threads", "MUSA"]
+---
+
+The Vulkan backend provides cross-vendor GPU acceleration. It works on any GPU with a Vulkan-capable driver, including AMD, Intel, and NVIDIA cards.
+
+## Prerequisites
+
+Make sure your GPU driver includes Vulkan support. Most modern drivers do — you can verify by running:
+
+```bash
+vulkaninfo --summary
+```
+
+If the command is not found, install the Vulkan SDK or your GPU vendor's driver package. On Debian/Ubuntu:
+
+```bash
+sudo apt install vulkan-tools
+```
+
+## Build with Vulkan
+
+```bash
+cmake -B build -DGGML_VULKAN=1
+cmake --build build -j --config Release
+```
+
+## Run inference
+
+Use whisper-cli as normal after building with Vulkan support:
+
+```bash
+./build/bin/whisper-cli -m models/ggml-base.en.bin -f samples/jfk.wav
+```
+
+## Docker image
+
+A pre-built Docker image with Vulkan support is available:
+
+```bash
+docker pull ghcr.io/ggml-org/whisper.cpp:main-vulkan
+```
+
+---
+
+## Moore Threads MUSA
+
+Moore Threads GPUs are supported via muBLAS and custom MUSA kernels, using the MUSA programming model (analogous to CUDA).
+
+### Prerequisites
+
+Install **MUSA SDK rc4.2.0** from the Moore Threads developer portal:
+
+- [MUSA SDK download — developer.mthreads.com](https://developer.mthreads.com/sdk/download/musa?equipment=&os=&driverVersion=&version=4.2.0)
+
+### Build with MUSA
+
+```bash
+cmake -B build -DGGML_MUSA=1
+cmake --build build -j --config Release
+```
+
+### Specify GPU architecture
+
+If you know the architecture of your Moore Threads GPU, you can set it explicitly. For example, for a MTT S80 GPU (architecture `21`):
+
+```bash
+cmake -B build -DGGML_MUSA=1 -DMUSA_ARCHITECTURES="21"
+cmake --build build -j --config Release
+```
+
+### Docker image
+
+A pre-built Docker image with MUSA support is available:
+
+```bash
+docker pull ghcr.io/ggml-org/whisper.cpp:main-musa
+```

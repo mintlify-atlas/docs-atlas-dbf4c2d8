@@ -1,0 +1,48 @@
+---
+title: "Acceleration backends"
+description: "whisper.cpp supports multiple hardware acceleration backends. Choose the one that matches your hardware for maximum inference speed."
+keywords: ["acceleration", "backends", "GPU", "Metal", "CUDA", "Vulkan", "OpenVINO", "BLAS", "CANN", "MUSA"]
+---
+
+whisper.cpp runs on CPU by default with no extra dependencies. For faster inference, enable a hardware acceleration backend at build time using a CMake flag.
+
+## Backend comparison
+
+| Backend | Hardware | CMake flag | Notes |
+|---|---|---|---|
+| Apple Metal | Apple Silicon (M-series) GPUs | `-DGGML_METAL=1` (default on macOS) | Full GPU inference via Metal |
+| Core ML | Apple Neural Engine (ANE) | `-DWHISPER_COREML=1` | Encoder only; requires model conversion |
+| NVIDIA CUDA | NVIDIA GPUs | `-DGGML_CUDA=1` | cuBLAS + custom CUDA kernels |
+| Vulkan | Any Vulkan-capable GPU | `-DGGML_VULKAN=1` | Cross-vendor; requires Vulkan driver |
+| OpenVINO | Intel CPUs and Intel GPUs | `-DWHISPER_OPENVINO=1` | Encoder only; requires model conversion |
+| OpenBLAS | Any CPU | `-DGGML_BLAS=1` | CPU-only; good for POWER architectures |
+| CANN | Ascend NPUs (Atlas series) | `-DGGML_CANN=1` | Huawei Ascend NPU via CANN toolkit |
+| Moore Threads MUSA | Moore Threads GPUs | `-DGGML_MUSA=1` | muBLAS + custom MUSA kernels |
+
+## CPU-only fallback
+
+If no acceleration flag is set, whisper.cpp builds with CPU-only inference. This works on every supported platform and requires no extra dependencies:
+
+```bash
+cmake -B build
+cmake --build build -j --config Release
+```
+
+CPU inference uses AVX/AVX2 intrinsics on x86, ARM NEON on Apple Silicon and ARM, and VSX intrinsics on POWER9/10 automatically when the compiler detects the target architecture.
+
+## Choosing a backend
+
+<CardGroup cols={2}>
+  <Card title="Apple Silicon" icon="apple" href="/backends/apple-silicon">
+    Metal GPU inference and Core ML via the Apple Neural Engine. Best choice for Mac, iPhone, and iPad.
+  </Card>
+  <Card title="NVIDIA GPU (CUDA)" icon="microchip" href="/backends/nvidia-cuda">
+    cuBLAS and custom CUDA kernels. Best choice for Linux and Windows workstations with NVIDIA cards.
+  </Card>
+  <Card title="Vulkan GPU" icon="bolt" href="/backends/vulkan">
+    Cross-vendor GPU acceleration. Works on AMD, Intel, and NVIDIA GPUs via the Vulkan API. Also covers Moore Threads MUSA.
+  </Card>
+  <Card title="OpenVINO" icon="server" href="/backends/openvino">
+    Intel CPU and GPU acceleration. Also covers OpenBLAS CPU acceleration and Ascend NPU support.
+  </Card>
+</CardGroup>

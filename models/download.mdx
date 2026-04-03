@@ -1,0 +1,96 @@
+---
+title: "Downloading models"
+description: "Download pre-converted ggml Whisper models using a script, make shortcuts, or manually from HuggingFace."
+---
+
+whisper.cpp requires models in the `ggml` binary format. Pre-converted models are hosted on HuggingFace and can be downloaded with a script or manually.
+
+## Download using the script
+
+<Steps>
+  <Step title="Navigate to your whisper.cpp directory">
+    Make sure you are in the root of your cloned `whisper.cpp` repository.
+
+    ```bash
+    git clone https://github.com/ggml-org/whisper.cpp.git
+    cd whisper.cpp
+    ```
+  </Step>
+
+  <Step title="Run the download script">
+    <Tabs>
+      <Tab title="Linux / macOS">
+        Pass the model name as an argument to `download-ggml-model.sh`:
+
+        ```bash
+        sh ./models/download-ggml-model.sh base.en
+        ```
+
+        Example output:
+
+        ```text
+        Downloading ggml model base.en ...
+        models/ggml-base.en.bin          100%[=============================================>] 141.11M  5.41MB/s    in 22s
+        Done! Model 'base.en' saved in 'models/ggml-base.en.bin'
+        You can now use it like this:
+
+          $ ./build/bin/whisper-cli -m models/ggml-base.en.bin -f samples/jfk.wav
+        ```
+      </Tab>
+      <Tab title="Windows">
+        Use the `.cmd` version of the script:
+
+        ```bat
+        .\models\download-ggml-model.cmd base.en
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Run inference with the downloaded model">
+    Build the project and pass the model path to `whisper-cli`:
+
+    ```bash
+    cmake -B build
+    cmake --build build -j --config Release
+    ./build/bin/whisper-cli -m models/ggml-base.en.bin -f samples/jfk.wav
+    ```
+  </Step>
+</Steps>
+
+## Download using make shortcuts
+
+For convenience, the project's `Makefile` includes shortcuts that download a model and run inference on the sample files in one step:
+
+```bash
+make -j tiny.en
+make -j tiny
+make -j base.en
+make -j base
+make -j small.en
+make -j small
+make -j medium.en
+make -j medium
+make -j large-v1
+make -j large-v2
+make -j large-v3
+make -j large-v3-turbo
+```
+
+For example, `make base.en` downloads `ggml-base.en.bin` and runs transcription on all `.wav` files in the `samples/` folder.
+
+## Download manually from HuggingFace
+
+All pre-converted `ggml` models are available for direct download at:
+
+**https://huggingface.co/ggerganov/whisper.cpp/tree/main**
+
+Download the `.bin` file for your chosen model and place it in the `models/` directory of your repository. The filename follows the pattern `ggml-<model-name>.bin`.
+
+<Note>
+The script and `make` shortcuts cover the most common models. The HuggingFace repository contains additional variants including quantized (`-q5_0`) and tinydiarize (`-tdrz`) models.
+</Note>
+
+## Available model names
+
+For a full list of models and their disk sizes, see [Models overview](/models/overview).

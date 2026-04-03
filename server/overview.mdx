@@ -1,0 +1,255 @@
+---
+title: "HTTP server overview"
+description: "Run whisper.cpp as an HTTP server to transcribe audio via a simple OpenAI-compatible API."
+---
+
+`whisper-server` is a lightweight HTTP server that exposes audio transcription through a REST API. It accepts audio files as multipart form data and returns transcriptions in multiple formats, making it easy to integrate whisper.cpp into web applications and pipelines.
+
+## Build
+
+<Steps>
+  <Step title="Configure the build">
+    ```bash
+    cmake -B build
+    ```
+  </Step>
+  <Step title="Compile the server">
+    ```bash
+    cmake --build build -j --config Release
+    ```
+
+    The compiled binary is placed at `build/bin/whisper-server`.
+  </Step>
+</Steps>
+
+## Start the server
+
+```bash
+./build/bin/whisper-server -m models/ggml-base.en.bin
+```
+
+The server listens on `127.0.0.1:8080` by default. You can override the host and port with `--host` and `--port`.
+
+<Warning>
+  Do not run the server with administrative privileges. Ensure it runs in a sandbox environment. The server accepts user-uploaded files and optionally invokes ffmpeg for audio conversion — always validate and sanitize inputs to guard against security threats.
+</Warning>
+
+## CLI flags
+
+### Threading
+
+<ParamField path="-t N" type="integer" default="4">
+  Number of threads to use during computation (`--threads N`).
+</ParamField>
+
+<ParamField path="-p N" type="integer" default="1">
+  Number of processors to use during computation (`--processors N`).
+</ParamField>
+
+### Audio
+
+<ParamField path="-ot N" type="integer" default="0">
+  Time offset in milliseconds (`--offset-t N`).
+</ParamField>
+
+<ParamField path="-on N" type="integer" default="0">
+  Segment index offset (`--offset-n N`).
+</ParamField>
+
+<ParamField path="-d N" type="integer" default="0">
+  Duration of audio to process in milliseconds. `0` means process the full file (`--duration N`).
+</ParamField>
+
+<ParamField path="-mc N" type="integer" default="-1">
+  Maximum number of text context tokens to store (`--max-context N`).
+</ParamField>
+
+<ParamField path="-ml N" type="integer" default="0">
+  Maximum segment length in characters (`--max-len N`).
+</ParamField>
+
+<ParamField path="-sow" type="boolean" default="false">
+  Split on word rather than on token (`--split-on-word`).
+</ParamField>
+
+<ParamField path="-ac N" type="integer" default="0">
+  Audio context size. `0` uses the full context (`--audio-ctx N`).
+</ParamField>
+
+### Decoding
+
+<ParamField path="-bo N" type="integer" default="2">
+  Number of best candidates to keep (`--best-of N`).
+</ParamField>
+
+<ParamField path="-bs N" type="integer" default="-1">
+  Beam size for beam search. `-1` disables beam search (`--beam-size N`).
+</ParamField>
+
+<ParamField path="-wt N" type="float" default="0.01">
+  Word timestamp probability threshold (`--word-thold N`).
+</ParamField>
+
+<ParamField path="-et N" type="float" default="2.40">
+  Entropy threshold for decoder fail (`--entropy-thold N`).
+</ParamField>
+
+<ParamField path="-lpt N" type="float" default="-1.00">
+  Log probability threshold for decoder fail (`--logprob-thold N`).
+</ParamField>
+
+### Output
+
+<ParamField path="-ps" type="boolean" default="false">
+  Print special tokens (`--print-special`).
+</ParamField>
+
+<ParamField path="-pc" type="boolean" default="false">
+  Print colors (`--print-colors`).
+</ParamField>
+
+<ParamField path="-pr" type="boolean" default="false">
+  Print output in realtime (`--print-realtime`).
+</ParamField>
+
+<ParamField path="-pp" type="boolean" default="false">
+  Print progress (`--print-progress`).
+</ParamField>
+
+<ParamField path="-nt" type="boolean" default="false">
+  Do not print timestamps (`--no-timestamps`).
+</ParamField>
+
+### Language
+
+<ParamField path="-l LANG" type="string" default="en">
+  Spoken language. Pass `auto` for automatic detection (`--language LANG`).
+</ParamField>
+
+<ParamField path="-dl" type="boolean" default="false">
+  Exit after automatically detecting the language (`--detect-language`).
+</ParamField>
+
+<ParamField path="--prompt PROMPT" type="string" default="">
+  Initial prompt to condition the decoder.
+</ParamField>
+
+### Model
+
+<ParamField path="-m FNAME" type="string" default="models/ggml-base.en.bin">
+  Path to the GGML model file (`--model FNAME`).
+</ParamField>
+
+<ParamField path="-oved D" type="string" default="CPU">
+  OpenVINO device used for encode inference (`--ov-e-device DNAME`).
+</ParamField>
+
+<ParamField path="-dtw MODEL" type="string" default="">
+  Compute token-level timestamps using dynamic time warping (`--dtw MODEL`).
+</ParamField>
+
+### Server
+
+<ParamField path="--host HOST" type="string" default="127.0.0.1">
+  Hostname or IP address for the server to bind to.
+</ParamField>
+
+<ParamField path="--port PORT" type="integer" default="8080">
+  Port number for the server.
+</ParamField>
+
+<ParamField path="--public PATH" type="string" default="examples/server/public">
+  Path to the directory of static files to serve.
+</ParamField>
+
+<ParamField path="--request-path PATH" type="string" default="">
+  Prefix path for all requests.
+</ParamField>
+
+<ParamField path="--inference-path PATH" type="string" default="/inference">
+  Path for the inference endpoint.
+</ParamField>
+
+### Features
+
+<ParamField path="--convert" type="boolean" default="false">
+  Convert uploaded audio to WAV before processing. Requires `ffmpeg` to be installed on the server.
+</ParamField>
+
+<ParamField path="-sns" type="boolean" default="false">
+  Suppress non-speech tokens (`--suppress-nst`).
+</ParamField>
+
+<ParamField path="-nth N" type="float" default="0.60">
+  No-speech probability threshold (`--no-speech-thold N`).
+</ParamField>
+
+<ParamField path="-nc" type="boolean" default="false">
+  Do not use previous audio context (`--no-context`).
+</ParamField>
+
+<ParamField path="-ng" type="boolean" default="false">
+  Do not use GPU (`--no-gpu`).
+</ParamField>
+
+<ParamField path="-fa" type="boolean" default="false">
+  Enable flash attention (`--flash-attn`).
+</ParamField>
+
+<ParamField path="-tr" type="boolean" default="false">
+  Translate from the source language to English (`--translate`).
+</ParamField>
+
+<ParamField path="-di" type="boolean" default="false">
+  Stereo audio diarization (`--diarize`).
+</ParamField>
+
+<ParamField path="-tdrz" type="boolean" default="false">
+  Enable tinydiarize. Requires a `tdrz` model (`--tinydiarize`).
+</ParamField>
+
+<ParamField path="-nf" type="boolean" default="false">
+  Do not use temperature fallback while decoding (`--no-fallback`).
+</ParamField>
+
+<ParamField path="-debug" type="boolean" default="false">
+  Enable debug mode, for example to dump `log_mel` (`--debug-mode`).
+</ParamField>
+
+<ParamField path="-nlp" type="boolean" default="false">
+  Exclude language probabilities from `verbose_json` output (`--no-language-probabilities`).
+</ParamField>
+
+### VAD (Voice Activity Detection)
+
+<ParamField path="--vad" type="boolean" default="false">
+  Enable Voice Activity Detection. Only segments identified as speech are passed to the transcription model.
+</ParamField>
+
+<ParamField path="-vm FNAME" type="string" default="">
+  Path to the VAD model file (`--vad-model FNAME`).
+</ParamField>
+
+<ParamField path="-vt N" type="float" default="0.50">
+  VAD probability threshold. Frames above this value are classified as speech (`--vad-threshold N`).
+</ParamField>
+
+<ParamField path="-vspd N" type="integer" default="250">
+  Minimum speech duration in milliseconds (`--vad-min-speech-duration-ms N`).
+</ParamField>
+
+<ParamField path="-vsd N" type="integer" default="100">
+  Minimum silence duration in milliseconds used to split segments (`--vad-min-silence-duration-ms N`).
+</ParamField>
+
+<ParamField path="-vmsd N" type="float" default="FLT_MAX">
+  Maximum speech duration in seconds. Longer segments are split automatically (`--vad-max-speech-duration-s N`).
+</ParamField>
+
+<ParamField path="-vp N" type="integer" default="30">
+  Padding added to each side of a detected speech segment in milliseconds (`--vad-speech-pad-ms N`).
+</ParamField>
+
+<ParamField path="-vo N" type="float" default="0.10">
+  Overlap in seconds between consecutive VAD segments (`--vad-samples-overlap N`).
+</ParamField>

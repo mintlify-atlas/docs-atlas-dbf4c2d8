@@ -1,0 +1,119 @@
+---
+title: "Apple Silicon"
+description: "Run whisper.cpp on Apple Silicon with ARM NEON, the Accelerate framework, Metal GPU inference, and Core ML via the Apple Neural Engine."
+keywords: ["Apple Silicon", "Metal", "Core ML", "ANE", "ARM NEON", "Accelerate", "macOS"]
+---
+
+whisper.cpp treats Apple Silicon as a first-class platform. It uses ARM NEON intrinsics and the Accelerate framework automatically, and offloads the full model to the GPU via Metal with no extra flags needed on macOS.
+
+## ARM NEON and Accelerate
+
+On any Apple Silicon device, the standard build automatically enables:
+
+- **ARM NEON** — vectorized math operations on the CPU
+- **Apple Accelerate framework** — BLAS routines via the system `vecLib`
+
+These are on by default. The standard build command is sufficient:
+
+```bash
+cmake -B build
+cmake --build build -j --config Release
+```
+
+You can confirm they are active by looking at `system_info` in the output:
+
+```text
+system_info: n_threads = 4 / 10 | AVX = 0 | AVX2 = 0 | AVX512 = 0 | FMA = 0 | NEON = 1 | ARM_FMA = 1 | F16C = 0 | FP16_VA = 1 | WASM_SIMD = 0 | BLAS = 1 | ...
+```
+
+## Metal GPU inference
+
+On macOS, the Metal backend is compiled in by default and whisper.cpp runs fully on the GPU with no additional configuration.
+
+<Note>
+Metal is enabled automatically on macOS. You do not need to pass any CMake flag.
+</Note>
+
+## Core ML support
+
+The Encoder can be executed on the **Apple Neural Engine (ANE)** via Core ML. This can be more than 3× faster than CPU-only execution.
+
+<Note>
+Core ML accelerates only the Encoder. The Decoder continues to run on the CPU or GPU.
+</Note>
+
+### Prerequisites
+
+- macOS Sonoma (version 14) or newer is recommended. Older macOS versions may produce hallucinations.
+- Python 3.11 is recommended.
+- [Xcode](https://developer.apple.com/xcode/) must be installed. Run `xcode-select --install` to confirm the command-line tools are available.
+
+<Steps>
+  <Step title="Set up a Python environment">
+    Using a virtual environment or [Miniconda](https://docs.conda.io/en/latest/miniconda.html) is recommended to avoid dependency conflicts.
+
+    <Tabs>
+      <Tab title="conda">
+        ```bash
+        conda create -n py311-whisper python=3.11 -y
+        conda activate py311-whisper
+        ```
+      </Tab>
+      <Tab title="venv">
+        ```bash
+        python3.11 -m venv coreml-env
+        source coreml-env/bin/activate
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Install Python dependencies">
+    ```bash
+    pip install ane_transformers
+    pip install openai-whisper
+    pip install coremltools
+    ```
+  </Step>
+
+  <Step title="Generate the Core ML model">
+    Run the conversion script from the whisper.cpp root directory. The following example converts `base.en`:
+
+    ```bash
+    ./models/generate-coreml-model.sh base.en
+    ```
+
+    This creates `models/ggml-base.en-encoder.mlmodelc`.
+  </Step>
+
+  <Step title="Build whisper.cpp with Core ML support">
+    ```bash
+    cmake -B build -DWHISPER_COREML=1
+    cmake --build build -j --config Release
+    ```
+  </Step>
+
+  <Step title="Run inference">
+    Use whisper-cli as normal. The Core ML model is loaded automatically if its `.mlmodelc` folder is present next to the ggml model:
+
+    ```bash
+    ./build/bin/whisper-cli -m models/ggml-base.en.bin -f samples/jfk.wav
+    ```
+
+    Look for these lines in the output to confirm Core ML is active:
+
+    ```text
+    whisper_init_state: loading Core ML model from 'models/ggml-base.en-encoder.mlmodelc'
+    whisper_init_state: first run on a device may take a while ...
+    whisper_init_state: Core ML model loaded
+
+    system_info: n_threads = 4 / 10 | AVX = 0 | AVX2 = 0 | AVX512 = 0 | FMA = 0 | NEON = 1 | ARM_FMA = 1 | F16C = 0 | FP16_VA = 1 | WASM_SIMD = 0 | BLAS = 1 | SSE3 = 0 | VSX = 0 | COREML = 1 |
+    ```
+
+    `COREML = 1` confirms the ANE is being used.
+  </Step>
+</Steps>
+
+<Warning>
+The first run after building is slow. The ANE service compiles the Core ML model to a device-specific format on first use. Subsequent runs are significantly faster.
+</Warning>

@@ -1,0 +1,276 @@
+---
+title: "Reading results"
+description: "Access transcribed segments, tokens, timestamps, probabilities, and performance timings after running whisper_full."
+keywords: ["whisper_full_n_segments", "whisper_full_get_segment_text", "tokens", "timestamps", "results"]
+---
+
+After a successful call to `whisper_full()` or `whisper_full_with_state()`, results are stored in the context state. Use the functions below to read them out. All segment and token indices are zero-based.
+
+## Segments
+
+A _segment_ is a contiguous run of audio that Whisper assigned a single block of text. It can be a clause, a sentence, or more, depending on the audio and parameters.
+
+### `whisper_full_n_segments`
+
+```c
+int whisper_full_n_segments(struct whisper_context *ctx);
+int whisper_full_n_segments_from_state(struct whisper_state *state);
+```
+
+Returns the number of text segments generated. Use the `_from_state` variant when you called `whisper_full_with_state()`.
+
+### `whisper_full_get_segment_text`
+
+```c
+const char *whisper_full_get_segment_text(
+    struct whisper_context *ctx,
+    int i_segment);
+
+const char *whisper_full_get_segment_text_from_state(
+    struct whisper_state *state,
+    int i_segment);
+```
+
+Returns the UTF-8 text of segment `i_segment`. The returned pointer is owned by the context — do not free it.
+
+### Segment timestamps
+
+```c
+int64_t whisper_full_get_segment_t0(struct whisper_context *ctx, int i_segment);
+int64_t whisper_full_get_segment_t0_from_state(struct whisper_state *state, int i_segment);
+
+int64_t whisper_full_get_segment_t1(struct whisper_context *ctx, int i_segment);
+int64_t whisper_full_get_segment_t1_from_state(struct whisper_state *state, int i_segment);
+```
+
+Returns the start (`t0`) and end (`t1`) time of a segment. Times are in **centiseconds** (hundredths of a second). Divide by 100 to get seconds.
+
+```c
+int64_t t0 = whisper_full_get_segment_t0(ctx, i);
+int64_t t1 = whisper_full_get_segment_t1(ctx, i);
+printf("[%lld.%02lld --> %lld.%02lld]\n",
+       t0 / 100, t0 % 100,
+       t1 / 100, t1 % 100);
+```
+
+### `whisper_full_get_segment_speaker_turn_next`
+
+```c
+bool whisper_full_get_segment_speaker_turn_next(
+    struct whisper_context *ctx,
+    int i_segment);
+```
+
+Returns `true` when the TinyDiarize model predicts that a speaker change follows this segment. Only meaningful when `tdrz_enable` was set to `true` in `whisper_full_params`.
+
+### `whisper_full_get_segment_no_speech_prob`
+
+```c
+float whisper_full_get_segment_no_speech_prob(
+    struct whisper_context *ctx,
+    int i_segment);
+
+float whisper_full_get_segment_no_speech_prob_from_state(
+    struct whisper_state *state,
+    int i_segment);
+```
+
+Returns the no-speech probability `[0.0, 1.0]` for a segment. Values above `no_speech_thold` (default `0.6`) indicate the segment likely contains silence or noise rather than speech.
+
+## Tokens
+
+Whisper tokenises its output using a byte-pair encoding (BPE) vocabulary. Each segment is composed of one or more tokens.
+
+### `whisper_full_n_tokens`
+
+```c
+int whisper_full_n_tokens(struct whisper_context *ctx, int i_segment);
+int whisper_full_n_tokens_from_state(struct whisper_state *state, int i_segment);
+```
+
+Returns the number of tokens in segment `i_segment`.
+
+### `whisper_full_get_token_text`
+
+```c
+const char *whisper_full_get_token_text(
+    struct whisper_context *ctx,
+    int i_segment,
+    int i_token);
+
+const char *whisper_full_get_token_text_from_state(
+    struct whisper_context *ctx,
+    struct whisper_state   *state,
+    int i_segment,
+    int i_token);
+```
+
+Returns the UTF-8 string for token `i_token` in segment `i_segment`. The returned pointer is owned by the context.
+
+### `whisper_full_get_token_data`
+
+```c
+whisper_token_data whisper_full_get_token_data(
+    struct whisper_context *ctx,
+    int i_segment,
+    int i_token);
+
+whisper_token_data whisper_full_get_token_data_from_state(
+    struct whisper_state *state,
+    int i_segment,
+    int i_token);
+```
+
+Returns a `whisper_token_data` struct with full per-token information.
+
+```c
+typedef struct whisper_token_data {
+    whisper_token id;    // token id
+    whisper_token tid;   // forced timestamp token id
+
+    float p;             // probability of the token
+    float plog;          // log probability of the token
+    float pt;            // probability of the timestamp token
+    float ptsum;         // sum of probabilities of all timestamp tokens
+
+    int64_t t0;          // start time of the token (centiseconds)
+    int64_t t1;          // end time of the token (centiseconds)
+
+    int64_t t_dtw;       // [EXPERIMENTAL] DTW-derived token timestamp (centiseconds)
+
+    float vlen;          // voice length of the token
+} whisper_token_data;
+```
+
+<ResponseField name="id" type="whisper_token">
+  Token id in the BPE vocabulary.
+</ResponseField>
+
+<ResponseField name="tid" type="whisper_token">
+  The forced timestamp token id associated with this token.
+</ResponseField>
+
+<ResponseField name="p" type="float">
+  Probability of this token in `[0.0, 1.0]`.
+</ResponseField>
+
+<ResponseField name="plog" type="float">
+  Natural log probability of this token.
+</ResponseField>
+
+<ResponseField name="pt" type="float">
+  Probability of the timestamp token for this position.
+</ResponseField>
+
+<ResponseField name="ptsum" type="float">
+  Sum of probabilities of all timestamp tokens at this position.
+</ResponseField>
+
+<ResponseField name="t0" type="int64_t">
+  Token start time in centiseconds. Only valid when `token_timestamps` was enabled in `whisper_full_params`.
+</ResponseField>
+
+<ResponseField name="t1" type="int64_t">
+  Token end time in centiseconds. Only valid when `token_timestamps` was enabled.
+</ResponseField>
+
+<ResponseField name="t_dtw" type="int64_t">
+  **Experimental.** DTW-derived timestamp in centiseconds. Roughly corresponds to the moment the token was output in the audio. Only valid when `dtw_token_timestamps` was enabled in `whisper_context_params`.
+</ResponseField>
+
+<ResponseField name="vlen" type="float">
+  Voice length of the token (heuristic measure of voiced content).
+</ResponseField>
+
+### `whisper_full_get_token_p`
+
+```c
+float whisper_full_get_token_p(
+    struct whisper_context *ctx,
+    int i_segment,
+    int i_token);
+```
+
+Convenience accessor returning `whisper_token_data.p` for token `i_token` in segment `i_segment`.
+
+## Language detection result
+
+```c
+int whisper_full_lang_id(struct whisper_context *ctx);
+int whisper_full_lang_id_from_state(struct whisper_state *state);
+```
+
+Returns the language id detected or selected for the last inference call. Pass the id to `whisper_lang_str()` or `whisper_lang_str_full()` to get the BCP-47 code or the full language name.
+
+## Performance timings
+
+### `whisper_timings` struct
+
+```c
+struct whisper_timings {
+    float sample_ms;   // time spent sampling / computing mel
+    float encode_ms;   // time spent in the encoder
+    float decode_ms;   // time spent in the decoder
+    float batchd_ms;   // time spent in batched decode
+    float prompt_ms;   // time spent processing the prompt
+};
+```
+
+### `whisper_get_timings`
+
+```c
+struct whisper_timings *whisper_get_timings(struct whisper_context *ctx);
+```
+
+Returns a pointer to the timing statistics for the context's default state. The pointer is owned by the context.
+
+### `whisper_print_timings`
+
+```c
+void whisper_print_timings(struct whisper_context *ctx);
+```
+
+Prints a human-readable timing summary to stderr.
+
+### `whisper_reset_timings`
+
+```c
+void whisper_reset_timings(struct whisper_context *ctx);
+```
+
+Resets all timing counters to zero.
+
+## Complete iteration example
+
+```c
+#include <stdio.h>
+#include "whisper.h"
+
+void print_results(struct whisper_context *ctx) {
+    const int n_segments = whisper_full_n_segments(ctx);
+
+    for (int i = 0; i < n_segments; ++i) {
+        const char *text = whisper_full_get_segment_text(ctx, i);
+        int64_t     t0   = whisper_full_get_segment_t0(ctx, i);
+        int64_t     t1   = whisper_full_get_segment_t1(ctx, i);
+        float       nsp  = whisper_full_get_segment_no_speech_prob(ctx, i);
+
+        printf("[%lld.%02lld --> %lld.%02lld]  (no_speech=%.2f)%s%s\n",
+               t0 / 100, t0 % 100,
+               t1 / 100, t1 % 100,
+               nsp, text,
+               whisper_full_get_segment_speaker_turn_next(ctx, i) ? " [SPEAKER_TURN]" : "");
+
+        /* Optional: iterate tokens */
+        const int n_tokens = whisper_full_n_tokens(ctx, i);
+        for (int j = 0; j < n_tokens; ++j) {
+            whisper_token_data td = whisper_full_get_token_data(ctx, i, j);
+            printf("  token %-4d  p=%.3f  t0=%lld  t1=%lld  %s\n",
+                   td.id, td.p, td.t0, td.t1,
+                   whisper_full_get_token_text(ctx, i, j));
+        }
+    }
+
+    whisper_print_timings(ctx);
+}
+```

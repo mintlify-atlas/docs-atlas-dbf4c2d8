@@ -1,0 +1,61 @@
+---
+title: "Introduction"
+description: "whisper.cpp is a high-performance C/C++ port of OpenAI's Whisper automatic speech recognition model."
+---
+
+## What is whisper.cpp?
+
+whisper.cpp is a plain C/C++ implementation of [OpenAI's Whisper](https://github.com/openai/whisper) ASR model. It runs inference without any external dependencies, making it easy to embed in applications across a wide range of platforms and hardware configurations.
+
+The entire high-level model implementation lives in two files: [`whisper.h`](https://github.com/ggml-org/whisper.cpp/blob/master/include/whisper.h) and [`whisper.cpp`](https://github.com/ggml-org/whisper.cpp/blob/master/src/whisper.cpp). The rest of the code belongs to the [`ggml`](https://github.com/ggml-org/ggml) machine learning library.
+
+## Key capabilities
+
+- **No dependencies** — plain C/C++ with zero runtime memory allocations
+- **Apple Silicon optimized** — ARM NEON, Accelerate framework, Metal, and Core ML support
+- **Multiple GPU backends** — CUDA (NVIDIA), Vulkan (cross-vendor), OpenVINO (Intel), and more
+- **x86 acceleration** — AVX intrinsics for x86 architectures
+- **Integer quantization** — smaller models with reduced memory and disk usage
+- **Mixed precision** — F16/F32 mixed precision inference
+- **C-style API** — easy integration via [`whisper.h`](https://github.com/ggml-org/whisper.cpp/blob/master/include/whisper.h)
+- **Voice Activity Detection** — built-in VAD support to skip non-speech audio
+
+## Supported platforms
+
+| Platform | Notes |
+|---|---|
+| macOS | Intel and Apple Silicon (ARM) |
+| iOS | [`whisper.objc`](https://github.com/ggml-org/whisper.cpp/tree/master/examples/whisper.objc) example |
+| Android | [`whisper.android`](https://github.com/ggml-org/whisper.cpp/tree/master/examples/whisper.android) example |
+| Linux / FreeBSD | Full support |
+| Windows | MSVC and MinGW |
+| WebAssembly | Browser-based inference via [`whisper.wasm`](https://github.com/ggml-org/whisper.cpp/tree/master/examples/whisper.wasm) |
+| Raspberry Pi | Runs on ARM single-board computers |
+| Docker | Pre-built images available |
+
+## Memory usage
+
+The memory requirements vary by model size. Choose the model that fits your available RAM and accuracy requirements.
+
+| Model | Disk | RAM |
+|---|---|---|
+| tiny | 75 MiB | ~273 MB |
+| base | 142 MiB | ~388 MB |
+| small | 466 MiB | ~852 MB |
+| medium | 1.5 GiB | ~2.1 GB |
+| large | 2.9 GiB | ~3.9 GB |
+
+<Tip>
+  For most use cases, the `base.en` model offers a good balance between speed and accuracy. Use `small` or `medium` for higher accuracy when resources allow.
+</Tip>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Clone the repo, build the project, and transcribe your first audio file in minutes.
+  </Card>
+  <Card title="Installation" icon="wrench" href="/installation">
+    Detailed build instructions for all platforms and hardware backends.
+  </Card>
+</CardGroup>

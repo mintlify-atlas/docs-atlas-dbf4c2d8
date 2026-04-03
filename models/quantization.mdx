@@ -1,0 +1,79 @@
+---
+title: "Quantization"
+description: "Reduce model memory usage and disk size with integer quantization."
+---
+
+whisper.cpp supports integer quantization of `ggml` Whisper models. Quantized models require less memory and disk space, and on certain hardware they can run more efficiently than the full-precision originals.
+
+## What quantization does
+
+By default, `ggml` models store weights in 16-bit or 32-bit floating point. Quantization converts weights to lower-precision integer representations (for example, 5-bit integers with `q5_0`). The model file and the memory footprint at runtime both shrink substantially with minimal impact on transcription quality for most use cases.
+
+<Note>
+Quantization reduces accuracy to some degree. For highest accuracy requirements, use the full-precision model. For most production workloads, `q5_0` quality is acceptable.
+</Note>
+
+## Memory comparison
+
+| Model | Disk (full) | Disk (q5_0) | RAM (full) |
+|---|---|---|---|
+| tiny | 75 MiB | — | ~273 MB |
+| base | 142 MiB | — | ~388 MB |
+| small | 466 MiB | — | ~852 MB |
+| medium | 1.5 GiB | — | ~2.1 GB |
+| large-v2 | 2.9 GiB | 1.1 GiB | ~3.9 GB |
+| large-v3 | 2.9 GiB | 1.1 GiB | ~3.9 GB |
+| large-v3-turbo | 1.5 GiB | 547 MiB | — |
+
+Pre-quantized `-q5_0` models for `large-v2`, `large-v3`, and `large-v3-turbo` are available to [download directly](/models/download). You can also quantize any model locally using the steps below.
+
+## Quantize a model locally
+
+<Steps>
+  <Step title="Build the project">
+    Build whisper.cpp including the `quantize` tool:
+
+    ```bash
+    cmake -B build
+    cmake --build build -j --config Release
+    ```
+  </Step>
+
+  <Step title="Download the base model">
+    If you have not already done so, download the full-precision model you want to quantize:
+
+    ```bash
+    sh ./models/download-ggml-model.sh base.en
+    ```
+  </Step>
+
+  <Step title="Run the quantize tool">
+    Pass the input model, output path, and quantization type to the `quantize` binary:
+
+    ```bash
+    ./build/bin/quantize models/ggml-base.en.bin models/ggml-base.en-q5_0.bin q5_0
+    ```
+
+    The tool reads `ggml-base.en.bin` and writes the quantized model to `ggml-base.en-q5_0.bin`.
+  </Step>
+
+  <Step title="Run inference with the quantized model">
+    Use the quantized model the same way as any other model:
+
+    ```bash
+    ./build/bin/whisper-cli -m models/ggml-base.en-q5_0.bin ./samples/gb0.wav
+    ```
+  </Step>
+</Steps>
+
+## Quantization types
+
+The `quantize` tool accepts the quantization type as the third argument. The currently recommended type is `q5_0`, which is used for all pre-quantized models distributed on HuggingFace.
+
+| Type | Bits per weight | Notes |
+|---|---|---|
+| `q5_0` | 5 | Recommended. Good balance of size and quality. |
+
+<Warning>
+Quantized models are not compatible with all acceleration backends. If you encounter issues with a backend, try the full-precision model to confirm whether quantization is the cause.
+</Warning>

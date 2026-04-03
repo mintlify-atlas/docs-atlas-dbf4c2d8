@@ -1,0 +1,160 @@
+---
+title: "OpenVINO"
+description: "Accelerate whisper.cpp Encoder inference on Intel CPUs and Intel GPUs via OpenVINO. Also covers OpenBLAS CPU acceleration and Ascend NPU support."
+keywords: ["OpenVINO", "Intel", "GPU", "CPU", "acceleration", "OpenBLAS", "BLAS", "Ascend", "NPU", "CANN"]
+---
+
+## OpenVINO
+
+[OpenVINO](https://github.com/openvinotoolkit/openvino) accelerates the Encoder on Intel CPUs and Intel GPUs (integrated and discrete). The Decoder continues to run on the CPU.
+
+<Note>
+OpenVINO accelerates only the Encoder. You must convert the model to OpenVINO IR format before building.
+</Note>
+
+### Prerequisites
+
+- Python 3.10 is recommended.
+- Download the OpenVINO package from the [release page](https://github.com/openvinotoolkit/openvino/releases). The recommended version is [2024.6.0](https://github.com/openvinotoolkit/openvino/releases/tag/2024.6.0). Ready-to-use binaries are also available from the [OpenVINO archives](https://storage.openvinotoolkit.org/repositories/openvino/packages/2024.6/).
+
+<Steps>
+  <Step title="Set up a Python virtual environment and install dependencies">
+    Run these commands from the `models/` directory inside the whisper.cpp repository.
+
+    <Tabs>
+      <Tab title="Linux and macOS">
+        ```bash
+        cd models
+        python3 -m venv openvino_conv_env
+        source openvino_conv_env/bin/activate
+        python -m pip install --upgrade pip
+        pip install -r requirements-openvino.txt
+        ```
+      </Tab>
+      <Tab title="Windows">
+        ```powershell
+        cd models
+        python -m venv openvino_conv_env
+        openvino_conv_env\Scripts\activate
+        python -m pip install --upgrade pip
+        pip install -r requirements-openvino.txt
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Convert the Whisper model to OpenVINO IR format">
+    Run the conversion script from the `models/` directory. The following example converts `base.en`:
+
+    ```bash
+    python convert-whisper-to-openvino.py --model base.en
+    ```
+
+    This produces two files: `ggml-base.en-encoder-openvino.xml` and `ggml-base.en-encoder-openvino.bin`. Move them to the same folder as your ggml models — that is the default location whisper.cpp searches at runtime.
+  </Step>
+
+  <Step title="Source the OpenVINO environment variables">
+    After extracting the OpenVINO package, source its setup script to configure the environment.
+
+    <Tabs>
+      <Tab title="Linux">
+        ```bash
+        source /path/to/l_openvino_toolkit_ubuntu22_2023.0.0.10926.b4452d56304_x86_64/setupvars.sh
+        ```
+      </Tab>
+      <Tab title="Windows">
+        ```powershell
+        C:\Path\To\w_openvino_toolkit_windows_2023.0.0.10926.b4452d56304_x86_64\setupvars.bat
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Build whisper.cpp with OpenVINO support">
+    ```bash
+    cmake -B build -DWHISPER_OPENVINO=1
+    cmake --build build -j --config Release
+    ```
+  </Step>
+
+  <Step title="Run inference">
+    Use whisper-cli as normal. The OpenVINO encoder model is loaded automatically if it is in the same directory as the ggml model:
+
+    ```bash
+    ./build/bin/whisper-cli -m models/ggml-base.en.bin -f samples/jfk.wav
+    ```
+
+    Look for these lines to confirm OpenVINO is active:
+
+    ```text
+    whisper_ctx_init_openvino_encoder: loading OpenVINO model from 'models/ggml-base.en-encoder-openvino.xml'
+    whisper_ctx_init_openvino_encoder: first run on a device may take a while ...
+    whisper_openvino_init: path_model = models/ggml-base.en-encoder-openvino.xml, device = GPU, cache_dir = models/ggml-base.en-encoder-openvino-cache
+    whisper_ctx_init_openvino_encoder: OpenVINO model loaded
+
+    system_info: n_threads = 4 / 8 | AVX = 1 | AVX2 = 1 | AVX512 = 0 | FMA = 1 | NEON = 0 | ARM_FMA = 0 | F16C = 1 | FP16_VA = 0 | WASM_SIMD = 0 | BLAS = 0 | SSE3 = 1 | VSX = 0 | COREML = 0 | OPENVINO = 1 |
+    ```
+
+    `OPENVINO = 1` confirms the backend is active.
+  </Step>
+</Steps>
+
+<Warning>
+The first run on an OpenVINO device is slow. The framework compiles the IR model to a device-specific blob and caches it for subsequent runs.
+</Warning>
+
+---
+
+## OpenBLAS CPU acceleration
+
+OpenBLAS accelerates Encoder processing on the CPU using optimized BLAS routines. This is particularly effective on POWER9/10 architectures, and also benefits x86 systems.
+
+### Prerequisites
+
+Install OpenBLAS for your platform:
+
+- **Debian/Ubuntu**: `sudo apt install libopenblas-dev`
+- **Fedora/RHEL**: `sudo dnf install openblas-devel`
+- **macOS (Homebrew)**: `brew install openblas`
+- **Official site**: [openblas.net](https://www.openblas.net/)
+
+### Build with OpenBLAS
+
+```bash
+cmake -B build -DGGML_BLAS=1
+cmake --build build -j --config Release
+```
+
+---
+
+## Ascend NPU (CANN)
+
+Ascend NPUs from Huawei accelerate inference via the [CANN toolkit](https://www.hiascend.com/en/software/cann) and dedicated AI cores.
+
+### Verified devices
+
+| Ascend NPU | Status |
+|:---:|:---:|
+| Atlas 300T A2 | Supported |
+| Atlas 300I Duo | Supported |
+
+### Prerequisites
+
+Install the [CANN toolkit](https://www.hiascend.com/en/software/cann/community). The latest version is recommended.
+
+### Build with CANN
+
+```bash
+cmake -B build -DGGML_CANN=1
+cmake --build build -j --config Release
+```
+
+### Run inference
+
+```bash
+./build/bin/whisper-cli -f samples/jfk.wav -m models/ggml-base.en.bin -t 8
+```
+
+<Note>
+If you encounter issues with your Ascend NPU device, open a GitHub issue with the **[CANN]** prefix. If your device works successfully, consider updating the verified devices table in the source repository.
+</Note>

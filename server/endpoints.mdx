@@ -1,0 +1,289 @@
+---
+title: "API endpoints"
+description: "HTTP endpoints exposed by whisper-server for audio transcription and model management."
+---
+
+## POST /inference
+
+Transcribe an audio file. The server runs whisper inference and returns the result in the requested format.
+
+### Request
+
+Content-Type: `multipart/form-data`
+
+<ParamField body="file" type="file" required>
+  Audio file to transcribe. Without `--convert`, the server expects a WAV file. With `--convert` enabled, any format supported by ffmpeg is accepted.
+</ParamField>
+
+<ParamField body="temperature" type="float" default="0.0">
+  Sampling temperature. Lower values produce more deterministic output.
+</ParamField>
+
+<ParamField body="temperature_inc" type="float" default="0.2">
+  Temperature increment applied on each fallback retry when the decoder fails entropy or log-probability thresholds.
+</ParamField>
+
+<ParamField body="response_format" type="string" default="json">
+  Format of the transcription response. One of: `json`, `text`, `srt`, `vtt`, `verbose_json`.
+</ParamField>
+
+### Example
+
+```bash
+curl 127.0.0.1:8080/inference \
+  -H "Content-Type: multipart/form-data" \
+  -F file="@/path/to/audio.wav" \
+  -F temperature="0.0" \
+  -F temperature_inc="0.2" \
+  -F response_format="json"
+```
+
+### Response formats
+
+<Tabs>
+  <Tab title="json">
+    Returns a JSON object with the full transcription text.
+
+    ```json
+    {
+      "text": " And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    }
+    ```
+  </Tab>
+  <Tab title="verbose_json">
+    Returns a JSON object with the transcription text, detected language, duration, and per-segment detail with token-level data.
+
+    ```json
+    {
+      "task": "transcribe",
+      "language": "english",
+      "duration": 11.0,
+      "text": " And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "detected_language": "english",
+      "detected_language_probability": 0.98,
+      "language_probabilities": {
+        "en": 0.98,
+        "fr": 0.01
+      },
+      "segments": [
+        {
+          "id": 0,
+          "text": " And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+          "start": 0.0,
+          "end": 11.0,
+          "tokens": [400, 502, 452],
+          "words": [
+            {
+              "word": " And",
+              "start": 0.0,
+              "end": 0.32,
+              "t_dtw": -1,
+              "probability": 0.9
+            }
+          ],
+          "temperature": 0.0,
+          "avg_logprob": -0.18,
+          "no_speech_prob": 0.02
+        }
+      ]
+    }
+    ```
+
+    <Note>
+      Language probability fields (`detected_language`, `detected_language_probability`, `language_probabilities`) are omitted when the `-nlp` / `--no-language-probabilities` flag is set.
+    </Note>
+  </Tab>
+  <Tab title="text">
+    Returns the plain transcription text as `text/html`.
+
+    ```text
+     And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country.
+    ```
+  </Tab>
+  <Tab title="srt">
+    Returns SubRip subtitle format as `application/x-subrip`.
+
+    ```text
+    1
+    00:00:00,000 --> 00:00:11,000
+     And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country.
+
+    ```
+  </Tab>
+  <Tab title="vtt">
+    Returns WebVTT subtitle format as `text/vtt`.
+
+    ```text
+    WEBVTT
+
+    00:00:00.000 --> 00:00:11.000
+     And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country.
+
+    ```
+  </Tab>
+</Tabs>
+
+### Response fields (`verbose_json`)
+
+<ResponseField name="task" type="string" required>
+  Either `"transcribe"` or `"translate"`.
+</ResponseField>
+
+<ResponseField name="language" type="string" required>
+  Full name of the source language (e.g., `"english"`).
+</ResponseField>
+
+<ResponseField name="duration" type="float" required>
+  Duration of the audio in seconds.
+</ResponseField>
+
+<ResponseField name="text" type="string" required>
+  Full transcription text.
+</ResponseField>
+
+<ResponseField name="detected_language" type="string">
+  Full name of the detected language. Omitted when `--no-language-probabilities` is set.
+</ResponseField>
+
+<ResponseField name="detected_language_probability" type="float">
+  Confidence score for the detected language (0–1). Omitted when `--no-language-probabilities` is set.
+</ResponseField>
+
+<ResponseField name="language_probabilities" type="object">
+  Map of language codes to their detection probabilities. Only languages with probability above 0.001 are included. Omitted when `--no-language-probabilities` is set.
+</ResponseField>
+
+<ResponseField name="segments" type="array" required>
+  <Expandable title="segment properties">
+    <ResponseField name="id" type="integer">
+      Zero-based segment index.
+    </ResponseField>
+    <ResponseField name="text" type="string">
+      Transcription text for this segment.
+    </ResponseField>
+    <ResponseField name="start" type="float">
+      Segment start time in seconds.
+    </ResponseField>
+    <ResponseField name="end" type="float">
+      Segment end time in seconds.
+    </ResponseField>
+    <ResponseField name="tokens" type="integer[]">
+      Token IDs for this segment.
+    </ResponseField>
+    <ResponseField name="words" type="array">
+      <Expandable title="word properties">
+        <ResponseField name="word" type="string">
+          Word text.
+        </ResponseField>
+        <ResponseField name="start" type="float">
+          Word start time in seconds.
+        </ResponseField>
+        <ResponseField name="end" type="float">
+          Word end time in seconds.
+        </ResponseField>
+        <ResponseField name="t_dtw" type="float">
+          DTW-based timestamp. `-1` when DTW is not enabled.
+        </ResponseField>
+        <ResponseField name="probability" type="float">
+          Token probability (0–1).
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="temperature" type="float">
+      Sampling temperature used for this segment.
+    </ResponseField>
+    <ResponseField name="avg_logprob" type="float">
+      Average log-probability of tokens in this segment.
+    </ResponseField>
+    <ResponseField name="no_speech_prob" type="float">
+      Probability that this segment contains no speech.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## POST /load
+
+Load a different model at runtime without restarting the server. The server acquires a mutex lock during the swap, so in-flight requests complete before the model is replaced.
+
+### Request
+
+Content-Type: `multipart/form-data`
+
+<ParamField body="model" type="string" required>
+  Absolute or relative path to the GGML model file on the server's filesystem.
+</ParamField>
+
+### Example
+
+```bash
+curl 127.0.0.1:8080/load \
+  -H "Content-Type: multipart/form-data" \
+  -F model="models/ggml-large-v3.bin"
+```
+
+### Response
+
+Returns the plain text string `Load was successful!` on success.
+
+```text
+Load was successful!
+```
+
+<Warning>
+  If the model fails to initialize after being swapped, the server exits. There is no automatic rollback to the prior model.
+</Warning>
+
+---
+
+## GET /health
+
+Returns the current server state. Use this endpoint to check whether the server has finished loading a model and is ready to accept inference requests.
+
+### Response
+
+```json
+{ "status": "ok" }
+```
+
+When the server is still loading a model, it returns HTTP `503` with:
+
+```json
+{ "status": "loading model" }
+```
+
+---
+
+## Load testing with k6
+
+You can benchmark the server using the included `bench.js` script and [k6](https://k6.io/). The script sends concurrent multipart requests to the `/inference` endpoint.
+
+<Note>
+  Install k6 before running the script. See the [k6 installation guide](https://k6.io/docs/get-started/installation/).
+</Note>
+
+```bash
+k6 run bench.js \
+  --env FILE_PATH=/absolute/path/to/samples/jfk.wav \
+  --env BASE_URL=http://127.0.0.1:8080 \
+  --env ENDPOINT=/inference \
+  --env CONCURRENCY=4 \
+  --env TEMPERATURE=0.0 \
+  --env TEMPERATURE_INC=0.2 \
+  --env RESPONSE_FORMAT=json
+```
+
+### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `FILE_PATH` | — | Absolute or k6-relative path to the audio file to send. |
+| `BASE_URL` | `http://127.0.0.1:8080` | Base URL of the running server. |
+| `ENDPOINT` | `/inference` | API endpoint to target. |
+| `CONCURRENCY` | `4` | Number of concurrent virtual users. |
+| `TEMPERATURE` | `0.0` | Decoding temperature sent with each request. |
+| `TEMPERATURE_INC` | `0.2` | Temperature increment sent with each request. |
+| `RESPONSE_FORMAT` | `json` | Response format requested from the server. |
+
+The `bench.js` script is located in the same directory as the server source: `examples/server/bench.js`.

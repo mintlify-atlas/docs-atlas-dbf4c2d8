@@ -1,0 +1,181 @@
+---
+title: "Converting models"
+description: "Convert PyTorch, HuggingFace, and distilled Whisper models to the ggml format."
+---
+
+If you need a model that is not available as a pre-converted `ggml` file, you can convert it yourself. whisper.cpp provides scripts for three source formats.
+
+<Tabs>
+  <Tab title="PyTorch (OpenAI)">
+    Use this path to convert the original OpenAI Whisper models downloaded from the [openai/whisper](https://github.com/openai/whisper) repository.
+
+    **Prerequisites:** Python environment with the original `whisper` package installed.
+
+    <Steps>
+      <Step title="Clone the required repositories">
+        ```bash
+        git clone https://github.com/openai/whisper
+        git clone https://github.com/ggml-org/whisper.cpp
+        ```
+      </Step>
+
+      <Step title="Download the PyTorch model">
+        The OpenAI whisper package caches models in `~/.cache/whisper` when first used. To download the `medium` model:
+
+        ```bash
+        python -c "import whisper; whisper.load_model('medium')"
+        ```
+      </Step>
+
+      <Step title="Run the conversion script">
+        Replace `~/path/to/repo/whisper/` with the path to your clone of the `openai/whisper` repository:
+
+        ```bash
+        mkdir models/whisper-medium
+        python models/convert-pt-to-ggml.py ~/.cache/whisper/medium.pt ~/path/to/repo/whisper/ ./models/whisper-medium
+        mv ./models/whisper-medium/ggml-model.bin models/ggml-medium.bin
+        rmdir models/whisper-medium
+        ```
+
+        The output file `models/ggml-medium.bin` is ready to use with `whisper-cli`.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="HuggingFace (fine-tuned)">
+    Use this path for models fine-tuned with the Hugging Face Transformers implementation of Whisper. These models are in a different format from the original OpenAI checkpoints and require a separate conversion script.
+
+    **Prerequisites:** Python environment with `transformers` and `openai-whisper` installed.
+
+    <Steps>
+      <Step title="Clone the required repositories">
+        ```bash
+        git clone https://github.com/openai/whisper
+        git clone https://github.com/ggml-org/whisper.cpp
+        ```
+      </Step>
+
+      <Step title="Clone the HuggingFace model">
+        This example uses the `openai/whisper-medium` model. Replace it with your fine-tuned model repository:
+
+        ```bash
+        git clone https://huggingface.co/openai/whisper-medium
+        ```
+      </Step>
+
+      <Step title="Convert to ggml">
+        Run `convert-h5-to-ggml.py`, passing the HuggingFace model directory, the `openai/whisper` source directory, and the output directory:
+
+        ```bash
+        python3 ./whisper.cpp/models/convert-h5-to-ggml.py ./whisper-medium/ ./whisper .
+        ```
+
+        This produces `ggml-model.bin` in the current directory.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Distilled models">
+    The [distil-whisper](https://huggingface.co/distil-whisper) project provides smaller, faster variants of large Whisper models. whisper.cpp has initial support for these models via the same `convert-h5-to-ggml.py` script used for HuggingFace models.
+
+    <Warning>
+    The chunk-based transcription strategy used by distilled models is not yet implemented in whisper.cpp. Transcription quality may be sub-optimal for long audio files when using these models.
+    </Warning>
+
+    <Steps>
+      <Step title="Clone the required repositories">
+        ```bash
+        git clone https://github.com/openai/whisper
+        git clone https://github.com/ggml-org/whisper.cpp
+        ```
+      </Step>
+
+      <Step title="Download the distilled models">
+        ```bash
+        cd whisper.cpp/models
+        git clone https://huggingface.co/distil-whisper/distil-medium.en
+        git clone https://huggingface.co/distil-whisper/distil-large-v2
+        ```
+      </Step>
+
+      <Step title="Convert each model to ggml">
+        ```bash
+        python3 ./convert-h5-to-ggml.py ./distil-medium.en/ ../../whisper .
+        mv ggml-model.bin ggml-medium.en-distil.bin
+
+        python3 ./convert-h5-to-ggml.py ./distil-large-v2/ ../../whisper .
+        mv ggml-model.bin ggml-large-v2-distil.bin
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Core ML (Apple Silicon)">
+    On Apple Silicon devices, you can generate a Core ML encoder model that runs on the Apple Neural Engine (ANE) for significantly faster inference.
+
+    **Prerequisites:** macOS with Xcode installed. Python 3.11 is recommended.
+
+    <Steps>
+      <Step title="Install Python dependencies">
+        ```bash
+        pip install ane_transformers
+        pip install openai-whisper
+        pip install coremltools
+        ```
+
+        Confirm that Xcode command-line tools are installed:
+
+        ```bash
+        xcode-select --install
+        ```
+      </Step>
+
+      <Step title="Generate the Core ML model">
+        Run the generation script with the model name. This example generates the `base.en` encoder:
+
+        ```bash
+        ./models/generate-coreml-model.sh base.en
+        ```
+
+        This produces the compiled model package at `models/ggml-base.en-encoder.mlmodelc`.
+      </Step>
+
+      <Step title="Build with Core ML support enabled">
+        ```bash
+        cmake -B build -DWHISPER_COREML=1
+        cmake --build build -j --config Release
+        ```
+      </Step>
+
+      <Step title="Run inference">
+        Use `whisper-cli` as normal. It will detect and load the Core ML model automatically:
+
+        ```bash
+        ./build/bin/whisper-cli -m models/ggml-base.en.bin -f samples/jfk.wav
+        ```
+
+        On first run you will see output confirming the Core ML model is loaded:
+
+        ```text
+        whisper_init_state: loading Core ML model from 'models/ggml-base.en-encoder.mlmodelc'
+        whisper_init_state: first run on a device may take a while ...
+        whisper_init_state: Core ML model loaded
+        ```
+
+        <Note>
+        The first run is slow because the ANE service compiles the Core ML model to a device-specific format. Subsequent runs are faster.
+        </Note>
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Choosing a conversion path
+
+| Source | Script | Use case |
+|---|---|---|
+| OpenAI PyTorch checkpoint | `convert-pt-to-ggml.py` | Original Whisper models |
+| HuggingFace Transformers checkpoint | `convert-h5-to-ggml.py` | Fine-tuned or distilled models from HuggingFace |
+| Core ML encoder | `generate-coreml-model.sh` | Apple Silicon ANE acceleration |
+
+For most users, downloading a pre-converted model with the [download script](/models/download) is the simplest option.

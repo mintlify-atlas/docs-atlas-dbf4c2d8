@@ -1,0 +1,435 @@
+---
+title: "Running inference"
+description: "Configure and run transcription with whisper_full, handle callbacks, and use the low-level pipeline."
+keywords: ["whisper_full", "whisper_full_params", "inference", "transcription", "callbacks", "beam search"]
+---
+
+`whisper_full()` is the main entry point for transcription. It accepts raw PCM samples and a `whisper_full_params` struct and writes results into the context's default state, where you can read them back with the segment and token accessor functions.
+
+## `whisper_full_params`
+
+Always initialize this struct from `whisper_full_default_params()` before modifying any fields.
+
+```c
+struct whisper_full_params wparams =
+    whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+wparams.language   = "en";
+wparams.n_threads  = 4;
+wparams.translate  = false;
+```
+
+### Strategy
+
+<ParamField path="strategy" type="enum whisper_sampling_strategy" required>
+  Decoding strategy. Pass `WHISPER_SAMPLING_GREEDY` for greedy (fastest) or `WHISPER_SAMPLING_BEAM_SEARCH` for beam search (higher quality). Set at construction time via `whisper_full_default_params()`.
+</ParamField>
+
+### Threading and window
+
+<ParamField path="n_threads" type="int" default="min(4, hardware_concurrency)">
+  Number of CPU threads to use for mel spectrogram computation and decoding.
+</ParamField>
+
+<ParamField path="n_max_text_ctx" type="int" default="16384">
+  Maximum number of tokens from past transcription used as decoder prompt context.
+</ParamField>
+
+<ParamField path="offset_ms" type="int" default="0">
+  Start offset into the audio in milliseconds. Use this to process a sub-range of the input.
+</ParamField>
+
+<ParamField path="duration_ms" type="int" default="0">
+  Duration of audio to process in milliseconds. `0` means process to the end of the input.
+</ParamField>
+
+### Output control
+
+<ParamField path="translate" type="bool" default="false">
+  Translate the transcription to English instead of transcribing in the source language.
+</ParamField>
+
+<ParamField path="no_context" type="bool" default="false">
+  Do not use previous transcription text as a prompt for the decoder. Each call starts fresh.
+</ParamField>
+
+<ParamField path="no_timestamps" type="bool" default="false">
+  Suppress timestamp tokens from the output. Slightly faster but segments will not have time information.
+</ParamField>
+
+<ParamField path="single_segment" type="bool" default="false">
+  Force the entire audio to produce a single output segment. Useful for streaming or fixed-length utterances.
+</ParamField>
+
+<ParamField path="print_special" type="bool" default="false">
+  Include special tokens (e.g. `<SOT>`, `<EOT>`, `<BEG>`) in the text output.
+</ParamField>
+
+<ParamField path="print_progress" type="bool" default="true">
+  Print progress information to stderr during inference.
+</ParamField>
+
+<ParamField path="print_realtime" type="bool" default="false">
+  Print segments to stdout as they are produced. Prefer `new_segment_callback` instead for programmatic use.
+</ParamField>
+
+<ParamField path="print_timestamps" type="bool" default="true">
+  Include timestamps in realtime output when `print_realtime` is true.
+</ParamField>
+
+### Token-level timestamps
+
+<ParamField path="token_timestamps" type="bool" default="false">
+  **Experimental.** Enable per-token timestamp estimation using probability heuristics.
+</ParamField>
+
+<ParamField path="thold_pt" type="float" default="0.01">
+  Probability threshold for accepting a timestamp token.
+</ParamField>
+
+<ParamField path="thold_ptsum" type="float" default="0.01">
+  Sum-of-probability threshold for accepting a timestamp token.
+</ParamField>
+
+<ParamField path="max_len" type="int" default="0">
+  Maximum segment length in characters. `0` means no limit. Used to split long segments.
+</ParamField>
+
+<ParamField path="split_on_word" type="bool" default="false">
+  When `max_len > 0`, split segments on word boundaries rather than token boundaries.
+</ParamField>
+
+<ParamField path="max_tokens" type="int" default="0">
+  Maximum number of tokens per segment. `0` means no limit.
+</ParamField>
+
+### Experimental speed-up
+
+<ParamField path="debug_mode" type="bool" default="false">
+  Print extra debug information including the log-mel spectrogram dump.
+</ParamField>
+
+<ParamField path="audio_ctx" type="int" default="0">
+  Override the audio context size used by the encoder. `0` uses the model default. Smaller values reduce compute but may degrade accuracy.
+</ParamField>
+
+### Diarization
+
+<ParamField path="tdrz_enable" type="bool" default="false">
+  **Experimental.** Enable TinyDiarize speaker-turn detection. Requires a `tdrz`-capable model.
+</ParamField>
+
+### Prompting
+
+<ParamField path="suppress_regex" type="const char *" default="NULL">
+  A regular expression. Tokens whose text matches are suppressed during decoding.
+</ParamField>
+
+<ParamField path="initial_prompt" type="const char *" default="NULL">
+  Text prepended to the decoder's context window as an initial prompt. Helpful for domain adaptation (technical vocabulary, proper nouns, etc.).
+</ParamField>
+
+<ParamField path="carry_initial_prompt" type="bool" default="false">
+  When true, `initial_prompt` is prepended to every decode window, not just the first. Prevents the model from conditioning away from it over long audio.
+</ParamField>
+
+<ParamField path="prompt_tokens" type="const whisper_token *" default="NULL">
+  Token-level prompt alternative to `initial_prompt`. Obtain tokens with `whisper_tokenize()`.
+</ParamField>
+
+<ParamField path="prompt_n_tokens" type="int" default="0">
+  Number of tokens in the `prompt_tokens` array.
+</ParamField>
+
+### Language
+
+<ParamField path="language" type="const char *" default="en">
+  BCP-47 language code (e.g. `"en"`, `"de"`, `"ja"`). Set to `NULL`, `""`, or `"auto"` to enable automatic language detection.
+</ParamField>
+
+<ParamField path="detect_language" type="bool" default="false">
+  Run automatic language detection before decoding and store the result. The detected language id is available via `whisper_full_lang_id()`.
+</ParamField>
+
+### Decoding parameters
+
+<ParamField path="suppress_blank" type="bool" default="true">
+  Suppress blank tokens at the start of each segment.
+</ParamField>
+
+<ParamField path="suppress_nst" type="bool" default="false">
+  Suppress non-speech tokens defined in the Whisper tokenizer.
+</ParamField>
+
+<ParamField path="temperature" type="float" default="0.0">
+  Initial sampling temperature. Higher values increase randomness. Fallback sampling increments this by `temperature_inc` when confidence is low.
+</ParamField>
+
+<ParamField path="max_initial_ts" type="float" default="1.0">
+  Maximum value of the first timestamp token. Prevents the model from skipping audio at the start of a segment.
+</ParamField>
+
+<ParamField path="length_penalty" type="float" default="-1.0">
+  Sequence length penalty applied during beam search. `-1.0` disables it.
+</ParamField>
+
+### Fallback parameters
+
+<ParamField path="temperature_inc" type="float" default="0.2">
+  Amount to increase `temperature` by on each fallback retry when `entropy_thold` or `logprob_thold` is exceeded.
+</ParamField>
+
+<ParamField path="entropy_thold" type="float" default="2.4">
+  Compression-ratio-like entropy threshold. Decoding is retried with higher temperature when exceeded.
+</ParamField>
+
+<ParamField path="logprob_thold" type="float" default="-1.0">
+  Average log-probability threshold. Decoding is retried when the mean log-probability falls below this value.
+</ParamField>
+
+<ParamField path="no_speech_thold" type="float" default="0.6">
+  No-speech probability threshold. Segments above this are marked as silent and suppressed.
+</ParamField>
+
+### Strategy-specific fields
+
+<ParamField path="greedy.best_of" type="int" default="-1">
+  Number of candidates sampled per step in greedy decoding when `temperature > 0`. `-1` means the value is unset; the effective default when using `WHISPER_SAMPLING_GREEDY` is `1`.
+</ParamField>
+
+<ParamField path="beam_search.beam_size" type="int" default="5">
+  Beam width for beam search decoding. Default is `5` when initialized with `WHISPER_SAMPLING_BEAM_SEARCH`.
+</ParamField>
+
+<ParamField path="beam_search.patience" type="float" default="-1.0">
+  Beam search patience factor (not yet implemented).
+</ParamField>
+
+### Callbacks
+
+<ParamField path="new_segment_callback" type="whisper_new_segment_callback" default="NULL">
+  Called each time a new text segment is produced. Signature:
+  `void cb(struct whisper_context *ctx, struct whisper_state *state, int n_new, void *user_data)`.
+</ParamField>
+
+<ParamField path="new_segment_callback_user_data" type="void *" default="NULL">
+  Passed as `user_data` to `new_segment_callback`.
+</ParamField>
+
+<ParamField path="progress_callback" type="whisper_progress_callback" default="NULL">
+  Called periodically with progress `[0, 100]`. Signature:
+  `void cb(struct whisper_context *ctx, struct whisper_state *state, int progress, void *user_data)`.
+</ParamField>
+
+<ParamField path="progress_callback_user_data" type="void *" default="NULL">
+  Passed as `user_data` to `progress_callback`.
+</ParamField>
+
+<ParamField path="encoder_begin_callback" type="whisper_encoder_begin_callback" default="NULL">
+  Called before the encoder runs each chunk. Return `false` to abort. Signature:
+  `bool cb(struct whisper_context *ctx, struct whisper_state *state, void *user_data)`.
+</ParamField>
+
+<ParamField path="encoder_begin_callback_user_data" type="void *" default="NULL">
+  Passed as `user_data` to `encoder_begin_callback`.
+</ParamField>
+
+<ParamField path="abort_callback" type="ggml_abort_callback" default="NULL">
+  Called before each ggml computation graph run. Return `true` to abort.
+</ParamField>
+
+<ParamField path="logits_filter_callback" type="whisper_logits_filter_callback" default="NULL">
+  Called after temperature scaling, before sampling. Lets you modify logits in place. Signature:
+  `void cb(struct whisper_context *ctx, struct whisper_state *state, const whisper_token_data *tokens, int n_tokens, float *logits, void *user_data)`.
+</ParamField>
+
+### Grammar constraints
+
+<ParamField path="grammar_rules" type="const whisper_grammar_element **" default="NULL">
+  Array of grammar rule arrays that constrain the output vocabulary. Use `whisper_grammar_element` with `WHISPER_GRETYPE_*` values.
+</ParamField>
+
+<ParamField path="n_grammar_rules" type="size_t" default="0">
+  Number of rules in `grammar_rules`.
+</ParamField>
+
+<ParamField path="i_start_rule" type="size_t" default="0">
+  Index of the root rule to start grammar parsing from.
+</ParamField>
+
+<ParamField path="grammar_penalty" type="float" default="100.0">
+  Logit penalty applied to tokens that violate the grammar.
+</ParamField>
+
+### VAD integration
+
+<ParamField path="vad" type="bool" default="false">
+  Enable built-in Voice Activity Detection to skip silent regions before decoding.
+</ParamField>
+
+<ParamField path="vad_model_path" type="const char *" default="NULL">
+  Path to the Silero VAD model file.
+</ParamField>
+
+<ParamField path="vad_params" type="whisper_vad_params">
+  VAD configuration. See the [VAD API reference](/api/vad) for field descriptions.
+</ParamField>
+
+## `whisper_full_default_params`
+
+```c
+struct whisper_full_params whisper_full_default_params(
+    enum whisper_sampling_strategy strategy);
+```
+
+Returns a `whisper_full_params` with recommended defaults for the specified strategy. Always call this first.
+
+## `whisper_full`
+
+```c
+int whisper_full(
+    struct whisper_context *ctx,
+    struct whisper_full_params params,
+    const float *samples,
+    int n_samples);
+```
+
+Runs the complete pipeline — PCM → mel spectrogram → encoder → decoder → text — and stores results in the context's default state. Returns `0` on success, non-zero on failure.
+
+<ParamField path="ctx" type="struct whisper_context *" required>
+  Initialized context.
+</ParamField>
+
+<ParamField path="params" type="struct whisper_full_params" required>
+  Inference configuration.
+</ParamField>
+
+<ParamField path="samples" type="const float *" required>
+  Mono 32-bit float PCM audio at 16 000 Hz, values in `[-1.0, 1.0]`.
+</ParamField>
+
+<ParamField path="n_samples" type="int" required>
+  Number of samples in `samples`.
+</ParamField>
+
+## `whisper_full_with_state`
+
+```c
+int whisper_full_with_state(
+    struct whisper_context *ctx,
+    struct whisper_state *state,
+    struct whisper_full_params params,
+    const float *samples,
+    int n_samples);
+```
+
+Same as `whisper_full()` but writes results into the provided `state` instead of the default state. Use this to run inference concurrently across multiple threads — one `whisper_state` per thread, all sharing the same `whisper_context`.
+
+## `whisper_full_parallel`
+
+```c
+int whisper_full_parallel(
+    struct whisper_context *ctx,
+    struct whisper_full_params params,
+    const float *samples,
+    int n_samples,
+    int n_processors);
+```
+
+Splits the audio into `n_processors` chunks and processes each chunk in parallel using `whisper_full_with_state()` internally. Results are merged into the default state. Can offer a speedup for long audio, but accuracy at chunk boundaries may be reduced.
+
+<ParamField path="n_processors" type="int" required>
+  Number of parallel processors (threads) to use.
+</ParamField>
+
+## Callback types
+
+```c
+// Called on each new text segment
+typedef void (*whisper_new_segment_callback)(
+    struct whisper_context *ctx,
+    struct whisper_state   *state,
+    int                     n_new,
+    void                   *user_data);
+
+// Called periodically with progress 0-100
+typedef void (*whisper_progress_callback)(
+    struct whisper_context *ctx,
+    struct whisper_state   *state,
+    int                     progress,
+    void                   *user_data);
+
+// Called before each encoder run; return false to abort
+typedef bool (*whisper_encoder_begin_callback)(
+    struct whisper_context *ctx,
+    struct whisper_state   *state,
+    void                   *user_data);
+
+// Called after temperature scaling to filter logits in place
+typedef void (*whisper_logits_filter_callback)(
+    struct whisper_context    *ctx,
+    struct whisper_state      *state,
+    const whisper_token_data  *tokens,
+    int                        n_tokens,
+    float                     *logits,
+    void                      *user_data);
+```
+
+## Low-level pipeline
+
+You can drive the encoder and decoder individually when you need custom mel input or want to call `whisper_decode()` in your own loop.
+
+### `whisper_pcm_to_mel`
+
+```c
+int whisper_pcm_to_mel(
+    struct whisper_context *ctx,
+    const float            *samples,
+    int                     n_samples,
+    int                     n_threads);
+```
+
+Converts raw PCM to a log-mel spectrogram and stores it in the context's default state. Returns `0` on success.
+
+### `whisper_encode`
+
+```c
+int whisper_encode(
+    struct whisper_context *ctx,
+    int                     offset,
+    int                     n_threads);
+```
+
+Runs the Whisper encoder on the mel spectrogram stored in the context's default state. `offset` is the frame offset into the spectrogram. Call `whisper_pcm_to_mel()` first. Returns `0` on success.
+
+### `whisper_decode`
+
+```c
+int whisper_decode(
+    struct whisper_context *ctx,
+    const whisper_token    *tokens,
+    int                     n_tokens,
+    int                     n_past,
+    int                     n_threads);
+```
+
+Runs the decoder for one step given the provided token context. `n_past` is the number of tokens from previous calls to reuse from the KV cache. Logits for the next token are available via `whisper_get_logits()`. Call `whisper_encode()` first. Returns `0` on success.
+
+## Language detection
+
+```c
+int whisper_lang_auto_detect(
+    struct whisper_context *ctx,
+    int                     offset_ms,
+    int                     n_threads,
+    float                  *lang_probs);
+```
+
+Uses the first 30 seconds of the mel spectrogram to detect the spoken language. Returns the most likely language id, or negative on failure. If `lang_probs` is not `NULL`, fills it with per-language probabilities — allocate `whisper_lang_max_id() + 1` floats. Call `whisper_pcm_to_mel()` first.
+
+```c
+// Example: detect language
+float lang_probs[100];
+int lang_id = whisper_lang_auto_detect(ctx, 0, 4, lang_probs);
+printf("detected: %s (%.1f%%)\n",
+       whisper_lang_str(lang_id), lang_probs[lang_id] * 100.0f);
+```

@@ -1,0 +1,66 @@
+---
+title: "NVIDIA GPU (CUDA)"
+description: "Accelerate whisper.cpp inference on NVIDIA GPUs using cuBLAS and custom CUDA kernels."
+keywords: ["NVIDIA", "CUDA", "cuBLAS", "GPU", "acceleration"]
+---
+
+With NVIDIA GPUs, whisper.cpp offloads model processing to the GPU via cuBLAS and custom CUDA kernels. This typically delivers a substantial speedup over CPU inference.
+
+## Prerequisites
+
+Install the CUDA toolkit for your platform before building:
+
+- [CUDA downloads — developer.nvidia.com](https://developer.nvidia.com/cuda-downloads)
+
+Make sure `nvcc` is on your `PATH` after installation:
+
+```bash
+nvcc --version
+```
+
+## Build with CUDA
+
+```bash
+cmake -B build -DGGML_CUDA=1
+cmake --build build -j --config Release
+```
+
+## Newer NVIDIA GPUs (RTX 5000 series and later)
+
+Some newer GPU architectures require you to specify the CUDA compute capability explicitly. For example, for an RTX 5000-series GPU (compute capability 8.6):
+
+```bash
+cmake -B build -DGGML_CUDA=1 -DCMAKE_CUDA_ARCHITECTURES="86"
+cmake --build build -j --config Release
+```
+
+<Note>
+Check the [CUDA GPU compute capability table](https://developer.nvidia.com/cuda-gpus) to find the correct architecture value for your GPU.
+</Note>
+
+## Verify CUDA is active
+
+Run whisper-cli and check the `system_info` line in the output. CUDA detection is reflected in the log output at startup. If the build succeeded and the CUDA toolkit was found, the GPU will be used automatically for model operations.
+
+```bash
+./build/bin/whisper-cli -m models/ggml-base.en.bin -f samples/jfk.wav
+```
+
+A successful CUDA build will log GPU device information at startup, for example:
+
+```text
+ggml_cuda_init: GGML_CUDA_FORCE_MMQ:    no
+ggml_cuda_init: GGML_CUDA_FORCE_CUBLAS: no
+ggml_cuda_init: found 1 CUDA devices:
+  Device 0: NVIDIA GeForce RTX 3090, compute capability 8.6, VMM: yes
+```
+
+## Docker image
+
+A pre-built Docker image with CUDA support is available:
+
+```bash
+docker pull ghcr.io/ggml-org/whisper.cpp:main-cuda
+```
+
+See the [Docker integration page](/integrations/docker) for usage instructions.

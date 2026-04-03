@@ -1,0 +1,81 @@
+---
+title: "Speaker diarization"
+description: "Detect speaker turns in audio using tinydiarize or separate speakers from stereo recordings using the -di flag."
+keywords: ["diarization", "speaker", "tinydiarize", "tdrz", "speaker turn", "stereo"]
+---
+
+whisper.cpp supports two approaches to identifying different speakers in audio: tinydiarize for detecting speaker turns in a single audio stream, and stereo diarization for separating two speakers from a stereo file.
+
+## tinydiarize
+
+tinydiarize is a local speaker turn detection approach that runs entirely on-device. It does not identify who is speaking — it marks where one speaker stops and another begins, inserting `[SPEAKER_TURN]` tokens into the transcript.
+
+<Warning>
+  tinydiarize is an experimental feature. It requires a special model variant and may produce inaccurate results depending on the audio.
+</Warning>
+
+### Requirements
+
+tinydiarize requires the `small.en-tdrz` model, which is a fine-tuned version of the `small.en` Whisper model trained to output speaker turn tokens.
+
+### Setup
+
+<Steps>
+  <Step title="Download the tinydiarize model">
+    ```bash
+    ./models/download-ggml-model.sh small.en-tdrz
+    ```
+  </Step>
+  <Step title="Run transcription with speaker turn detection">
+    ```bash
+    ./build/bin/whisper-cli -f ./samples/a13.wav -m ./models/ggml-small.en-tdrz.bin -tdrz
+    ```
+  </Step>
+</Steps>
+
+### Example output
+
+```text
+main: processing './samples/a13.wav' (480000 samples, 30.0 sec), 4 threads, 1 processors, lang = en, task = transcribe, tdrz = 1, timestamps = 1 ...
+
+[00:00:00.000 --> 00:00:03.800]   Okay Houston, we've had a problem here. [SPEAKER_TURN]
+[00:00:03.800 --> 00:00:06.200]   This is Houston. Say again please. [SPEAKER_TURN]
+[00:00:06.200 --> 00:00:08.260]   Uh Houston we've had a problem.
+[00:00:08.260 --> 00:00:11.320]   We've had a main beam up on a volt. [SPEAKER_TURN]
+[00:00:11.320 --> 00:00:13.820]   Roger main beam interval. [SPEAKER_TURN]
+[00:00:13.820 --> 00:00:15.100]   Uh uh [SPEAKER_TURN]
+[00:00:15.100 --> 00:00:18.020]   So okay stand, by thirteen we're looking at it. [SPEAKER_TURN]
+[00:00:18.020 --> 00:00:25.740]   Okay uh right now uh Houston the uh voltage is uh is looking good um.
+[00:00:27.620 --> 00:00:29.940]   And we had a a pretty large bank or so.
+```
+
+`[SPEAKER_TURN]` markers indicate where the model predicts a speaker change occurred.
+
+## Stereo diarization
+
+For stereo audio files where each channel contains a different speaker, use the `-di` flag. whisper.cpp processes the left and right channels separately and interleaves the results:
+
+```bash
+./build/bin/whisper-cli -f stereo_audio.wav -m ./models/ggml-base.en.bin -di
+```
+
+This is useful for phone call recordings or interview audio where speakers are separated into channels.
+
+## Limitations
+
+<CardGroup cols={2}>
+  <Card title="English only" icon="language">
+    The `small.en-tdrz` model is English-only. There is no multilingual tinydiarize model.
+  </Card>
+  <Card title="Turn detection, not identification" icon="users">
+    tinydiarize marks where speakers change but does not label or identify individual speakers.
+  </Card>
+  <Card title="Experimental accuracy" icon="flask-conical">
+    Speaker turn boundaries may be imprecise, especially in overlapping speech or noisy audio.
+  </Card>
+  <Card title="Model size" icon="hard-drive">
+    The `small.en-tdrz` model is larger than `tiny.en` or `base.en`. See the [models overview](/models/overview) for memory requirements.
+  </Card>
+</CardGroup>
+
+For more background on the tinydiarize implementation, see [PR #1058](https://github.com/ggml-org/whisper.cpp/pull/1058).

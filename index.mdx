@@ -1,97 +1,73 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "whisper.cpp"
+description: "High-performance C/C++ inference of OpenAI's Whisper automatic speech recognition model — no dependencies, multiple hardware backends, ready to embed anywhere."
 ---
 
-## Setting up
+whisper.cpp is a port of [OpenAI's Whisper](https://github.com/openai/whisper) ASR model written in plain C/C++. It runs fully offline with zero external dependencies, supports Apple Silicon, NVIDIA GPUs, Vulkan, and more — and ships a clean C API you can embed in any application.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Transcribe your first audio file in under five minutes.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Installation" icon="wrench" href="/installation">
+    Build from source with CMake for your platform and backend.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Models" icon="brain" href="/models/overview">
+    Download and manage Whisper models in ggml format.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="C API Reference" icon="code" href="/api/overview">
+    Full reference for the whisper.h C interface.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Get started in minutes
 
-Everything you need to create world-class documentation.
+<Steps>
+  <Step title="Clone and build">
+    ```bash
+    git clone https://github.com/ggml-org/whisper.cpp.git
+    cd whisper.cpp
+    cmake -B build
+    cmake --build build -j --config Release
+    ```
+  </Step>
+  <Step title="Download a model">
+    ```bash
+    sh ./models/download-ggml-model.sh base.en
+    ```
+  </Step>
+  <Step title="Transcribe audio">
+    ```bash
+    ./build/bin/whisper-cli -m models/ggml-base.en.bin -f samples/jfk.wav
+    ```
+  </Step>
+</Steps>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## What whisper.cpp supports
 
-## Need inspiration?
-
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<CardGroup cols={2}>
+  <Card title="Apple Silicon" icon="apple" href="/backends/apple-silicon">
+    Metal GPU acceleration and Core ML via Apple Neural Engine.
+  </Card>
+  <Card title="NVIDIA CUDA" icon="microchip" href="/backends/nvidia-cuda">
+    cuBLAS and custom CUDA kernels for fast GPU inference.
+  </Card>
+  <Card title="Vulkan" icon="bolt" href="/backends/vulkan">
+    Cross-vendor GPU acceleration on any Vulkan-capable device.
+  </Card>
+  <Card title="OpenVINO" icon="server" href="/backends/openvino">
+    Intel CPU and GPU acceleration via OpenVINO.
+  </Card>
+  <Card title="Voice Activity Detection" icon="waveform" href="/features/voice-activity-detection">
+    Skip silence, speed up transcription with Silero-VAD.
+  </Card>
+  <Card title="Language Bindings" icon="puzzle-piece" href="/integrations/bindings">
+    Go, JavaScript, Java, Ruby, Rust, Python, .NET, Swift, and more.
+  </Card>
+  <Card title="HTTP Server" icon="globe" href="/server/overview">
+    Drop-in REST API server with OpenAI-compatible endpoints.
+  </Card>
+  <Card title="Real-time Streaming" icon="microphone" href="/features/real-time-transcription">
+    Live microphone transcription with half-second latency.
+  </Card>
+</CardGroup>

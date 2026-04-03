@@ -1,0 +1,103 @@
+---
+title: "Real-time transcription"
+description: "Transcribe live microphone input with whisper-stream, sampling audio continuously and running inference as you speak."
+keywords: ["real-time", "streaming", "microphone", "whisper-stream", "sdl2", "live transcription"]
+---
+
+The `whisper-stream` tool captures audio from your microphone and runs Whisper inference continuously. It samples audio at a configurable interval and transcribes each chunk, producing a live text output as you speak.
+
+<Note>
+  `whisper-stream` requires [SDL2](https://wiki.libsdl.org/SDL2/Installation) for microphone access. Install it before building.
+</Note>
+
+## Install SDL2
+
+<Tabs>
+  <Tab title="Debian / Ubuntu">
+    ```bash
+    sudo apt-get install libsdl2-dev
+    ```
+  </Tab>
+  <Tab title="Fedora">
+    ```bash
+    sudo dnf install SDL2 SDL2-devel
+    ```
+  </Tab>
+  <Tab title="macOS">
+    ```bash
+    brew install sdl2
+    ```
+  </Tab>
+</Tabs>
+
+## Build
+
+Enable SDL2 support when configuring the build:
+
+```bash
+cmake -B build -DWHISPER_SDL2=ON
+cmake --build build -j --config Release
+```
+
+## Run
+
+```bash
+./build/bin/whisper-stream -m ./models/ggml-base.en.bin -t 8 --step 500 --length 5000
+```
+
+### Key parameters
+
+- **`--step`** — How often (in milliseconds) the tool samples and transcribes audio. A value of `500` means transcription runs every 500 ms.
+- **`--length`** — The length of the audio window (in milliseconds) passed to Whisper on each step. A value of `5000` means each transcription chunk covers the last 5 seconds of audio.
+- **`-t`** — Number of CPU threads to use for inference.
+
+### Sliding window mode with VAD
+
+Setting `--step` to `0` enables sliding window mode. In this mode, `whisper-stream` waits for speech activity before transcribing, rather than running on a fixed schedule:
+
+```bash
+./build/bin/whisper-stream -m ./models/ggml-base.en.bin -t 6 --step 0 --length 30000 -vth 0.6
+```
+
+The `-vth` argument sets the VAD threshold. Higher values require louder or clearer speech before transcription is triggered. A value around `0.6` works well in most environments. When silence is detected, the tool transcribes the last `--length` milliseconds and outputs a complete transcription block.
+
+## FFmpeg support for additional audio formats
+
+By default, `whisper-stream` works with 16-bit WAV files. To support additional formats such as Opus and AAC, build with FFmpeg integration:
+
+<Steps>
+  <Step title="Install FFmpeg libraries">
+    <Tabs>
+      <Tab title="Debian / Ubuntu">
+        ```bash
+        sudo apt install libavcodec-dev libavformat-dev libavutil-dev
+        ```
+      </Tab>
+      <Tab title="RHEL / Fedora">
+        ```bash
+        sudo dnf install libavcodec-free-devel libavformat-free-devel libavutil-free-devel
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Build with WHISPER_FFMPEG">
+    ```bash
+    cmake -B build -DWHISPER_SDL2=ON -DWHISPER_FFMPEG=yes
+    cmake --build build
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  FFmpeg support is currently Linux-only.
+</Warning>
+
+## Livestream transcription
+
+The `examples/livestream.sh` script transcribes audio from a live stream URL using `ffmpeg` and `whisper-cli`:
+
+```bash
+./examples/livestream.sh https://your-stream-url
+```
+
+This pipes the stream audio through `ffmpeg` into whisper for continuous transcription. See the script source for configuration options.

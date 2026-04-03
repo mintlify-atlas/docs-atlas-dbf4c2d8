@@ -1,0 +1,225 @@
+---
+title: "Installation"
+description: "Build whisper.cpp from source or install via Conan. Includes standard CMake, GPU backends, Docker images, and system requirements."
+---
+
+## Prerequisites
+
+- **CMake** 3.5 or later
+- A C/C++ compiler: GCC, Clang, MSVC, or MinGW
+- **Git** to clone the repository
+
+```bash
+git clone https://github.com/ggml-org/whisper.cpp.git
+cd whisper.cpp
+```
+
+## Build from source
+
+<Tabs>
+  <Tab title="Standard (CPU)">
+    The default build runs on CPU and requires no additional dependencies:
+
+    ```bash
+    cmake -B build
+    cmake --build build -j --config Release
+    ```
+
+    Binaries are written to `./build/bin/`.
+  </Tab>
+
+  <Tab title="NVIDIA CUDA">
+    Accelerates model processing on NVIDIA GPUs via cuBLAS and custom CUDA kernels.
+
+    <Note>
+      Install the [CUDA toolkit](https://developer.nvidia.com/cuda-downloads) before building.
+    </Note>
+
+    ```bash
+    cmake -B build -DGGML_CUDA=1
+    cmake --build build -j --config Release
+    ```
+
+    For newer NVIDIA GPUs (RTX 5000 series), specify the CUDA architecture:
+
+    ```bash
+    cmake -B build -DGGML_CUDA=1 -DCMAKE_CUDA_ARCHITECTURES="86"
+    cmake --build build -j --config Release
+    ```
+  </Tab>
+
+  <Tab title="Vulkan">
+    Cross-vendor GPU acceleration. Supported on most modern graphics cards.
+
+    <Note>
+      Make sure your graphics card driver includes Vulkan API support before building.
+    </Note>
+
+    ```bash
+    cmake -B build -DGGML_VULKAN=1
+    cmake --build build -j --config Release
+    ```
+  </Tab>
+
+  <Tab title="Apple Core ML">
+    On Apple Silicon devices, encoder inference can run on the Apple Neural Engine (ANE) via Core ML, achieving more than 3x speedup over CPU-only execution.
+
+    First, generate a Core ML model:
+
+    ```bash
+    pip install ane_transformers openai-whisper coremltools
+    ./models/generate-coreml-model.sh base.en
+    ```
+
+    Then build with Core ML support:
+
+    ```bash
+    cmake -B build -DWHISPER_COREML=1
+    cmake --build build -j --config Release
+    ```
+
+    <Tip>
+      Python 3.11 and macOS Sonoma (14) or newer are recommended for Core ML model generation.
+    </Tip>
+  </Tab>
+
+  <Tab title="OpenBLAS (CPU)">
+    Accelerates encoder processing on the CPU via OpenBLAS.
+
+    <Note>
+      Install `openblas` from [openblas.net](https://www.openblas.net/) before building.
+    </Note>
+
+    ```bash
+    cmake -B build -DGGML_BLAS=1
+    cmake --build build -j --config Release
+    ```
+
+    This is also the recommended build for POWER9/10 architectures.
+  </Tab>
+
+  <Tab title="FFmpeg (Linux)">
+    Enables support for additional audio formats (Opus, AAC, and others) beyond the default 16-bit WAV.
+
+    Install the required libraries first:
+
+    ```bash
+    # Debian/Ubuntu
+    sudo apt install libavcodec-dev libavformat-dev libavutil-dev
+
+    # RHEL/Fedora
+    sudo dnf install libavcodec-free-devel libavformat-free-devel libavutil-free-devel
+    ```
+
+    Then build with FFmpeg support:
+
+    ```bash
+    cmake -B build -DWHISPER_FFMPEG=yes
+    cmake --build build
+    ```
+
+    <Warning>
+      FFmpeg integration is only supported on Linux.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Conan package manager
+
+Install pre-built whisper.cpp binaries or build from source using [Conan](https://conan.io/):
+
+```bash
+conan install --requires="whisper-cpp/[*]" --build=missing
+```
+
+Refer to the [Conan documentation](https://docs.conan.io/2/) for detailed usage instructions.
+
+## Docker
+
+Docker images are available for Linux. Mount a local directory for models and audio files.
+
+### Available images
+
+| Image | Description | Platforms |
+|---|---|---|
+| `ghcr.io/ggml-org/whisper.cpp:main` | Main executable with `curl` and `ffmpeg` | `linux/amd64`, `linux/arm64` |
+| `ghcr.io/ggml-org/whisper.cpp:main-cuda` | Same as `main`, compiled with CUDA support | `linux/amd64` |
+| `ghcr.io/ggml-org/whisper.cpp:main-musa` | Same as `main`, compiled with MUSA support | `linux/amd64` |
+| `ghcr.io/ggml-org/whisper.cpp:main-vulkan` | Same as `main`, compiled with Vulkan support | `linux/amd64` |
+
+### Usage
+
+```bash
+# Download a model and persist it in a local folder
+docker run -it --rm \
+  -v path/to/models:/models \
+  whisper.cpp:main "./models/download-ggml-model.sh base /models"
+
+# Transcribe an audio file
+docker run -it --rm \
+  -v path/to/models:/models \
+  -v path/to/audios:/audios \
+  whisper.cpp:main "whisper-cli -m /models/ggml-base.bin -f /audios/jfk.wav"
+
+# Run the HTTP transcription server
+docker run -it --rm -p "8080:8080" \
+  -v path/to/models:/models \
+  whisper.cpp:main "whisper-server --host 127.0.0.1 -m /models/ggml-base.bin"
+```
+
+<Note>
+  Docker must be installed and running on your system before using these commands. Create a local folder to store models before mounting it as a volume.
+</Note>
+
+## Additional backends
+
+<AccordionGroup>
+  <Accordion title="OpenVINO (Intel CPUs and GPUs)">
+    Accelerates encoder inference on OpenVINO-supported devices, including x86 CPUs and Intel integrated and discrete GPUs.
+
+    Download the [OpenVINO package](https://github.com/openvinotoolkit/openvino/releases) (version 2024.6.0 recommended), then source the setup script:
+
+    ```bash
+    # Linux
+    source /path/to/l_openvino_toolkit_ubuntu22_2024.6.0/setupvars.sh
+    ```
+
+    Build with OpenVINO support:
+
+    ```bash
+    cmake -B build -DWHISPER_OPENVINO=1
+    cmake --build build -j --config Release
+    ```
+  </Accordion>
+
+  <Accordion title="Ascend NPU (CANN)">
+    Inference acceleration on Ascend NPU devices via the CANN framework.
+
+    Verified devices: Atlas 300T A2, Atlas 300I Duo.
+
+    Install the [CANN toolkit](https://www.hiascend.com/en/software/cann/community), then build:
+
+    ```bash
+    cmake -B build -DGGML_CANN=1
+    cmake --build build -j --config Release
+    ```
+  </Accordion>
+
+  <Accordion title="Moore Threads GPU (MUSA)">
+    GPU acceleration on Moore Threads cards via muBLAS and custom MUSA kernels.
+
+    Install [MUSA SDK rc4.2.0](https://developer.mthreads.com/sdk/download/musa), then build:
+
+    ```bash
+    cmake -B build -DGGML_MUSA=1
+    cmake --build build -j --config Release
+    ```
+
+    To specify the GPU architecture (for example, MTT S80):
+
+    ```bash
+    cmake -B build -DGGML_MUSA=1 -DMUSA_ARCHITECTURES="21"
+    cmake --build build -j --config Release
+    ```
+  </Accordion>
+</AccordionGroup>

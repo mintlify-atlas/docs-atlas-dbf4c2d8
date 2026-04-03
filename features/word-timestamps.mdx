@@ -1,0 +1,126 @@
+---
+title: "Word-level timestamps"
+description: "Control timestamp granularity from segment-level down to individual words or characters, and generate karaoke-style video output."
+keywords: ["timestamps", "word timestamps", "max-len", "print-colors", "karaoke", "owts"]
+---
+
+Whisper outputs timestamps for each segment by default. You can increase granularity to get timestamps for individual words or even character-bounded chunks, and you can highlight words by confidence using color coding.
+
+## Segment-level timestamps (default)
+
+By default, `whisper-cli` groups transcription into segments and prints a timestamp range for each one:
+
+```bash
+./build/bin/whisper-cli -m ./models/ggml-base.en.bin -f ./samples/jfk.wav
+```
+
+Example output:
+
+```text
+[00:00:00.000 --> 00:00:11.000]   And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country.
+```
+
+## Character-length segments
+
+Use `-ml N` (or `--max-len N`) to limit segments to a maximum of `N` characters. This breaks output into shorter, fixed-width lines, each with its own timestamp range:
+
+```bash
+./build/bin/whisper-cli -m ./models/ggml-base.en.bin -f ./samples/jfk.wav -ml 16
+```
+
+Example output:
+
+```text
+[00:00:00.000 --> 00:00:00.850]   And so my
+[00:00:00.850 --> 00:00:01.590]   fellow
+[00:00:01.590 --> 00:00:04.140]   Americans, ask
+[00:00:04.140 --> 00:00:05.660]   not what your
+[00:00:05.660 --> 00:00:06.840]   country can do
+[00:00:06.840 --> 00:00:08.430]   for you, ask
+[00:00:08.430 --> 00:00:09.440]   what you can do
+[00:00:09.440 --> 00:00:10.020]   for your
+[00:00:10.020 --> 00:00:11.000]   country.
+```
+
+## Word-level timestamps
+
+Set `-ml 1` to produce a timestamp for each individual word:
+
+```bash
+./build/bin/whisper-cli -m ./models/ggml-base.en.bin -f ./samples/jfk.wav -ml 1
+```
+
+Example output:
+
+```text
+[00:00:00.000 --> 00:00:00.320]
+[00:00:00.320 --> 00:00:00.370]   And
+[00:00:00.370 --> 00:00:00.690]   so
+[00:00:00.690 --> 00:00:00.850]   my
+[00:00:00.850 --> 00:00:01.590]   fellow
+[00:00:01.590 --> 00:00:02.850]   Americans
+[00:00:02.850 --> 00:00:03.300]  ,
+[00:00:03.300 --> 00:00:04.140]   ask
+[00:00:04.140 --> 00:00:04.990]   not
+[00:00:04.990 --> 00:00:05.410]   what
+[00:00:05.410 --> 00:00:05.660]   your
+[00:00:05.660 --> 00:00:06.260]   country
+[00:00:06.260 --> 00:00:06.600]   can
+[00:00:06.600 --> 00:00:06.840]   do
+[00:00:06.840 --> 00:00:07.010]   for
+[00:00:07.010 --> 00:00:08.170]   you
+[00:00:08.170 --> 00:00:08.190]  ,
+[00:00:08.190 --> 00:00:08.430]   ask
+[00:00:08.430 --> 00:00:08.910]   what
+[00:00:08.910 --> 00:00:09.040]   you
+[00:00:09.040 --> 00:00:09.320]   can
+[00:00:09.320 --> 00:00:09.440]   do
+[00:00:09.440 --> 00:00:09.760]   for
+[00:00:09.760 --> 00:00:10.020]   your
+[00:00:10.020 --> 00:00:10.510]   country
+[00:00:10.510 --> 00:00:11.000]  .
+```
+
+<Note>
+  Word-level timestamps are an experimental feature. Accuracy depends on the model size and audio quality.
+</Note>
+
+## Confidence color coding
+
+The `--print-colors` flag colorizes transcribed text based on the per-token confidence from the model. High-confidence words appear in one color; low-confidence words appear in another, giving you a quick visual signal of where Whisper is uncertain:
+
+```bash
+./build/bin/whisper-cli -m models/ggml-base.en.bin -f samples/gb0.wav --print-colors
+```
+
+This is useful for reviewing transcriptions and identifying segments that may need correction.
+
+## Karaoke-style video generation
+
+Use the `-owts` flag to generate a word-timed subtitle script that you can render as a karaoke-style video using `ffmpeg`. Each word is highlighted as it is spoken.
+
+<Steps>
+  <Step title="Generate the word-timestamp script">
+    ```bash
+    ./build/bin/whisper-cli -m ./models/ggml-base.en.bin -f ./samples/jfk.wav -owts
+    ```
+
+    This creates a shell script at `./samples/jfk.wav.wts`.
+  </Step>
+  <Step title="Run the generated script to produce the video">
+    ```bash
+    source ./samples/jfk.wav.wts
+    ```
+
+    The script invokes `ffmpeg` internally to render the video file at `./samples/jfk.wav.mp4`.
+  </Step>
+  <Step title="Play the video">
+    ```bash
+    ffplay ./samples/jfk.wav.mp4
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  `ffmpeg` must be installed and available on your `PATH` for the `-owts` script to work.
+</Warning>

@@ -1,0 +1,147 @@
+---
+title: "Language bindings"
+description: "Use whisper.cpp from your preferred programming language via official and community bindings."
+---
+
+whisper.cpp has official and community-maintained bindings for many languages. These bindings wrap the C API (`whisper.h`) to provide idiomatic interfaces in each language.
+
+<CardGroup cols={2}>
+  <Card title="Rust" icon="rust" href="https://github.com/tazz4843/whisper-rs">
+    Safe Rust bindings via `tazz4843/whisper-rs`. Wraps the full C API with idiomatic Rust types.
+  </Card>
+
+  <Card title="JavaScript / Node.js" icon="js" href="https://github.com/ggml-org/whisper.cpp/tree/master/bindings/javascript">
+    Official Node.js package built with Emscripten. Available on npm as `whisper.cpp`. Performance is comparable to running via WASM in the browser.
+  </Card>
+
+  <Card title="React Native" icon="mobile" href="https://github.com/mybigday/whisper.rn">
+    Cross-platform React Native bindings for iOS and Android via `mybigday/whisper.rn`.
+  </Card>
+
+  <Card title="Go" icon="golang" href="https://github.com/ggml-org/whisper.cpp/tree/master/bindings/go">
+    Official Go bindings in `bindings/go`. Includes a higher-level `pkg/whisper` package for idiomatic Go usage. Tested on Darwin x86_64, Debian arm64, and Fedora x86_64.
+  </Card>
+
+  <Card title="Java" icon="java" href="https://github.com/GiviMAD/whisper-jni">
+    Java JNI bindings via `GiviMAD/whisper-jni`. Also available as low-level JNA bindings in `bindings/java`. Tested on Ubuntu and Windows x86_64.
+  </Card>
+
+  <Card title="Ruby" icon="gem" href="https://github.com/ggml-org/whisper.cpp/tree/master/bindings/ruby">
+    Official Ruby bindings in `bindings/ruby`.
+  </Card>
+
+  <Card title="Objective-C / Swift" icon="apple" href="https://github.com/ggml-org/whisper.spm">
+    Swift Package Manager distribution via `ggml-org/whisper.spm`. Also see `exPHAT/SwiftWhisper` for a higher-level Swift API.
+  </Card>
+
+  <Card title=".NET" icon="microsoft" href="https://github.com/sandrohanea/whisper.net">
+    Two options: `sandrohanea/whisper.net` (full-featured .NET library) and `NickDarvey/whisper` (minimal bindings).
+  </Card>
+
+  <Card title="Python" icon="python" href="https://github.com/abdeladim-s/pywhispercpp">
+    Multiple Python packages available:
+    - `abdeladim-s/pywhispercpp` (Pybind11)
+    - `aarnphm/whispercpp` (Pybind11)
+    - `AIWintermuteAI/whispercpp` (updated fork)
+    - `stlukey/whispercpp.py` (Cython)
+  </Card>
+
+  <Card title="R" icon="r" href="https://github.com/bnosac/audio.whisper">
+    R bindings via `bnosac/audio.whisper` for use in R and audio analysis workflows.
+  </Card>
+
+  <Card title="Unity" icon="unity" href="https://github.com/Macoron/whisper.unity">
+    Unity game engine bindings via `macoron/whisper.unity` for on-device speech recognition in games.
+  </Card>
+</CardGroup>
+
+## Go bindings example
+
+The Go bindings provide both a low-level package (`bindings/go`) and a higher-level idiomatic package (`bindings/go/pkg/whisper`):
+
+```go
+import (
+    "github.com/ggerganov/whisper.cpp/bindings/go/pkg/whisper"
+)
+
+func main() {
+    var modelpath string  // Path to the model
+    var samples []float32 // Samples to process
+
+    // Load the model
+    model, err := whisper.New(modelpath)
+    if err != nil {
+        panic(err)
+    }
+    defer model.Close()
+
+    // Process samples
+    context, err := model.NewContext()
+    if err != nil {
+        panic(err)
+    }
+    if err := context.Process(samples, nil, nil, nil); err != nil {
+        return
+    }
+
+    // Print out the results
+    for {
+        segment, err := context.NextSegment()
+        if err != nil {
+            break
+        }
+        fmt.Printf("[%6s->%6s] %s\n", segment.Start, segment.End, segment.Text)
+    }
+}
+```
+
+To build and test the Go bindings:
+
+```bash
+git clone https://github.com/ggml-org/whisper.cpp.git
+cd whisper.cpp/bindings/go
+make test
+```
+
+## Java bindings example
+
+The Java bindings use JNA to load the `whispercpp` shared library:
+
+```java
+import io.github.ggerganov.whispercpp.WhisperCpp;
+
+public class Example {
+
+    public static void main(String[] args) {
+
+        WhisperCpp whisper = new WhisperCpp();
+        try {
+            // By default, models are loaded from ~/.cache/whisper/
+            whisper.initContext("../ggml-base.en.bin");
+            WhisperFullParams.ByValue whisperParams =
+                whisper.getFullDefaultParams(WhisperSamplingStrategy.WHISPER_SAMPLING_BEAM_SEARCH);
+
+            whisperParams.temperature = 0.0f;
+            whisperParams.temperature_inc = 0.2f;
+
+            float[] samples = readAudio(); // divide each value by 32767.0f
+            List<WhisperSegment> segments = whisper.fullTranscribeWithTime(whisperParams, samples);
+
+            for (WhisperSegment segment : segments) {
+                System.out.println("start: " + segment.getStart());
+                System.out.println("end: " + segment.getEnd());
+                System.out.println("text: " + segment.getSentence());
+            }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            whisper.close();
+        }
+    }
+}
+```
+
+<Note>
+  All bindings are MIT licensed, the same as the rest of the whisper.cpp project. For questions or discussion about a specific binding, see the [Bindings discussion category](https://github.com/ggml-org/whisper.cpp/discussions/categories/bindings) on GitHub.
+</Note>

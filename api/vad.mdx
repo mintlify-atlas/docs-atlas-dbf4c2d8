@@ -1,0 +1,274 @@
+---
+title: "Voice Activity Detection API"
+description: "Detect speech regions in audio with the Silero-VAD-based C API before passing them to whisper_full."
+keywords: ["VAD", "voice activity detection", "whisper_vad", "Silero", "speech detection"]
+---
+
+The VAD API lets you identify speech segments in a raw audio buffer before transcription. This avoids passing silent regions to `whisper_full()`, which reduces compute and can improve accuracy. The implementation is based on [Silero VAD](https://github.com/snakers4/silero-vad).
+
+You can either use VAD automatically through `whisper_full_params` (set `vad = true` and `vad_model_path`) or drive it manually with the standalone API described below.
+
+## `whisper_vad_params`
+
+Controls the VAD detection thresholds and timing constraints.
+
+```c
+typedef struct whisper_vad_params {
+    float threshold;
+    int   min_speech_duration_ms;
+    int   min_silence_duration_ms;
+    float max_speech_duration_s;
+    int   speech_pad_ms;
+    float samples_overlap;
+} whisper_vad_params;
+```
+
+<ParamField path="threshold" type="float">
+  Probability threshold for classifying a frame as speech. Frames with a speech probability above this value are considered speech. Typical range: `0.3`–`0.7`.
+</ParamField>
+
+<ParamField path="min_speech_duration_ms" type="int">
+  Minimum duration in milliseconds for a run of frames to be accepted as a speech segment. Shorter runs are discarded as noise.
+</ParamField>
+
+<ParamField path="min_silence_duration_ms" type="int">
+  Minimum silence gap in milliseconds required between two speech segments. Shorter gaps cause adjacent segments to be merged.
+</ParamField>
+
+<ParamField path="max_speech_duration_s" type="float">
+  Maximum duration in seconds for a single speech segment. Longer segments are split at this boundary, forcing a new segment to begin.
+</ParamField>
+
+<ParamField path="speech_pad_ms" type="int">
+  Padding in milliseconds added before and after each detected speech segment. Prevents clipping of the first and last word.
+</ParamField>
+
+<ParamField path="samples_overlap" type="float">
+  Overlap in seconds when copying audio samples from the boundaries of a speech segment. Used to preserve context at segment edges.
+</ParamField>
+
+## `whisper_vad_context_params`
+
+Controls threading and hardware for the VAD model itself.
+
+```c
+struct whisper_vad_context_params {
+    int  n_threads;
+    bool use_gpu;
+    int  gpu_device;
+};
+```
+
+<ParamField path="n_threads" type="int">
+  Number of CPU threads used for VAD inference.
+</ParamField>
+
+<ParamField path="use_gpu" type="bool">
+  Enable GPU acceleration for the VAD model when a supported backend is available.
+</ParamField>
+
+<ParamField path="gpu_device" type="int">
+  CUDA device index to use when `use_gpu` is true.
+</ParamField>
+
+## Default params
+
+```c
+struct whisper_vad_params         whisper_vad_default_params(void);
+struct whisper_vad_context_params whisper_vad_default_context_params(void);
+```
+
+Both functions return a struct populated with recommended default values. Always call these before overriding individual fields.
+
+## Loading a VAD model
+
+### `whisper_vad_init_from_file_with_params`
+
+```c
+struct whisper_vad_context *whisper_vad_init_from_file_with_params(
+    const char *path_model,
+    struct whisper_vad_context_params params);
+```
+
+Loads a Silero VAD ggml model file from disk. Returns `NULL` on failure.
+
+<ParamField path="path_model" type="const char *" required>
+  Path to the VAD model file.
+</ParamField>
+
+<ParamField path="params" type="struct whisper_vad_context_params" required>
+  Threading and hardware configuration.
+</ParamField>
+
+### `whisper_vad_init_with_params`
+
+```c
+struct whisper_vad_context *whisper_vad_init_with_params(
+    struct whisper_model_loader *loader,
+    struct whisper_vad_context_params params);
+```
+
+Loads a VAD model via a custom `whisper_model_loader`. Use this when the model is not stored on a standard filesystem.
+
+## Detecting speech
+
+### `whisper_vad_detect_speech`
+
+```c
+bool whisper_vad_detect_speech(
+    struct whisper_vad_context *vctx,
+    const float *samples,
+    int n_samples);
+```
+
+Runs the VAD model over the provided audio and stores per-frame speech probabilities internally. Returns `true` on success. After calling this, use `whisper_vad_probs()` to read the raw probabilities or `whisper_vad_segments_from_probs()` to get speech segments.
+
+<ParamField path="vctx" type="struct whisper_vad_context *" required>
+  Initialized VAD context.
+</ParamField>
+
+<ParamField path="samples" type="const float *" required>
+  Mono 32-bit float PCM at 16 000 Hz.
+</ParamField>
+
+<ParamField path="n_samples" type="int" required>
+  Number of samples.
+</ParamField>
+
+### Raw probability access
+
+```c
+int    whisper_vad_n_probs(struct whisper_vad_context *vctx);
+float *whisper_vad_probs  (struct whisper_vad_context *vctx);
+```
+
+`whisper_vad_n_probs()` returns the number of probability values produced by the last `whisper_vad_detect_speech()` call. `whisper_vad_probs()` returns a pointer to the array of per-frame speech probabilities. The pointer is owned by `vctx`.
+
+## Getting speech segments
+
+### `whisper_vad_segments_from_samples`
+
+```c
+struct whisper_vad_segments *whisper_vad_segments_from_samples(
+    struct whisper_vad_context *vctx,
+    struct whisper_vad_params   params,
+    const float *samples,
+    int n_samples);
+```
+
+Runs detection and segment extraction in one call. Equivalent to calling `whisper_vad_detect_speech()` followed by `whisper_vad_segments_from_probs()`. Returns a `whisper_vad_segments *` that must be freed with `whisper_vad_free_segments()`.
+
+### `whisper_vad_segments_from_probs`
+
+```c
+struct whisper_vad_segments *whisper_vad_segments_from_probs(
+    struct whisper_vad_context *vctx,
+    struct whisper_vad_params   params);
+```
+
+Converts the probability array (from a prior `whisper_vad_detect_speech()` call) into a list of speech segments using `params`. Returns a `whisper_vad_segments *` that must be freed with `whisper_vad_free_segments()`.
+
+## Iterating segments
+
+### `whisper_vad_segments_n_segments`
+
+```c
+int whisper_vad_segments_n_segments(struct whisper_vad_segments *segments);
+```
+
+Returns the number of detected speech segments.
+
+### `whisper_vad_segments_get_segment_t0` / `t1`
+
+```c
+float whisper_vad_segments_get_segment_t0(struct whisper_vad_segments *segments, int i_segment);
+float whisper_vad_segments_get_segment_t1(struct whisper_vad_segments *segments, int i_segment);
+```
+
+Returns the start (`t0`) and end (`t1`) time of speech segment `i_segment` in **seconds** (not centiseconds).
+
+## Cleanup
+
+```c
+void whisper_vad_free_segments(struct whisper_vad_segments *segments);
+void whisper_vad_free         (struct whisper_vad_context  *ctx);
+```
+
+Call `whisper_vad_free_segments()` to release a segments result and `whisper_vad_free()` to release the VAD context and model weights.
+
+## Full example: VAD + whisper pipeline
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include "whisper.h"
+
+/* load_pcm_file() — your own helper that fills *out_samples and *out_n */
+
+int main(void) {
+    /* --- Load audio --- */
+    float *pcm   = NULL;
+    int    n_pcm = 0;
+    load_pcm_file("audio.wav", &pcm, &n_pcm); /* implement this */
+
+    /* --- Initialize VAD --- */
+    struct whisper_vad_context_params vcp = whisper_vad_default_context_params();
+    vcp.n_threads = 4;
+
+    struct whisper_vad_context *vctx =
+        whisper_vad_init_from_file_with_params("models/silero-vad.bin", vcp);
+    if (!vctx) { fprintf(stderr, "failed to load VAD model\n"); return 1; }
+
+    /* --- Detect speech segments --- */
+    struct whisper_vad_params vp = whisper_vad_default_params();
+    vp.threshold             = 0.5f;
+    vp.min_speech_duration_ms = 250;
+    vp.speech_pad_ms          = 100;
+
+    struct whisper_vad_segments *segs =
+        whisper_vad_segments_from_samples(vctx, vp, pcm, n_pcm);
+
+    const int n_segs = whisper_vad_segments_n_segments(segs);
+    printf("detected %d speech segment(s)\n", n_segs);
+
+    /* --- Initialize Whisper --- */
+    whisper_context_params cparams = whisper_context_default_params();
+    struct whisper_context *ctx =
+        whisper_init_from_file_with_params("models/ggml-base.en.bin", cparams);
+    if (!ctx) { fprintf(stderr, "failed to load Whisper model\n"); return 1; }
+
+    struct whisper_full_params wparams =
+        whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+    wparams.language  = "en";
+    wparams.n_threads = 4;
+
+    /* --- Transcribe each speech segment --- */
+    for (int i = 0; i < n_segs; ++i) {
+        float t0 = whisper_vad_segments_get_segment_t0(segs, i);
+        float t1 = whisper_vad_segments_get_segment_t1(segs, i);
+
+        int start = (int)(t0 * 16000);
+        int end   = (int)(t1 * 16000);
+        if (end > n_pcm) end = n_pcm;
+
+        if (whisper_full(ctx, wparams, pcm + start, end - start) != 0) {
+            fprintf(stderr, "whisper_full failed for segment %d\n", i);
+            continue;
+        }
+
+        const int n_text_segs = whisper_full_n_segments(ctx);
+        for (int j = 0; j < n_text_segs; ++j) {
+            printf("[%.2f --> %.2f] %s\n",
+                   t0, t1, whisper_full_get_segment_text(ctx, j));
+        }
+    }
+
+    /* --- Cleanup --- */
+    whisper_vad_free_segments(segs);
+    whisper_vad_free(vctx);
+    whisper_free(ctx);
+    free(pcm);
+
+    return 0;
+}
+```

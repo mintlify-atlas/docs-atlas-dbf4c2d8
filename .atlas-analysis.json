@@ -1,23 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "whisper.cpp",
+  "projectType": "ai-ml",
+  "projectName": "whisper.cpp",
+  "projectDescription": "A high-performance C/C++ inference engine for OpenAI's Whisper automatic speech recognition model, supporting multiple hardware backends and language bindings.",
   "theme": "aspen",
-  "colors": {
-    "primary": "#3B82F6",
-    "light": "#EFF6FF",
-    "dark": "#1E3A5F"
-  },
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/ggml-org/whisper.cpp"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/ggml-org/whisper.cpp"
-    }
-  },
+  "primaryColor": "#3B82F6",
+  "lightColor": "#EFF6FF",
+  "darkColor": "#1E3A5F",
   "navigation": {
     "tabs": [
       {
@@ -92,5 +80,38 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "Plain C/C++ implementation with no external dependencies",
+    "Apple Silicon first-class support via ARM NEON, Metal, and Core ML",
+    "NVIDIA GPU acceleration via CUDA and cuBLAS",
+    "Vulkan cross-vendor GPU support",
+    "Integer quantization for reduced memory footprint",
+    "Voice Activity Detection (VAD) with Silero-VAD support",
+    "Real-time audio transcription from microphone input",
+    "Word-level timestamps and speaker diarization (tinydiarize)",
+    "HTTP server with OpenAI-compatible API",
+    "Bindings for Go, JavaScript, Java, Ruby, Rust, Python, .NET, and Swift"
+  ],
+  "publicApiSurface": [
+    "whisper_init_from_file_with_params()",
+    "whisper_init_from_buffer_with_params()",
+    "whisper_full()",
+    "whisper_full_parallel()",
+    "whisper_full_n_segments()",
+    "whisper_full_get_segment_text()",
+    "whisper_full_get_token_data()",
+    "whisper_pcm_to_mel()",
+    "whisper_encode()",
+    "whisper_decode()",
+    "whisper_lang_auto_detect()",
+    "whisper_free()",
+    "whisper_context_default_params()",
+    "whisper_full_default_params()",
+    "whisper_vad_init_from_file_with_params()",
+    "whisper_vad_detect_speech()",
+    "whisper_vad_segments_from_samples()",
+    "POST /inference",
+    "POST /load"
+  ]
 }

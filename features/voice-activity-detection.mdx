@@ -1,0 +1,119 @@
+---
+title: "Voice Activity Detection (VAD)"
+description: "Pre-filter audio to detect speech segments before passing them to Whisper, reducing processing time and improving transcription efficiency."
+keywords: ["vad", "voice activity detection", "silero", "speech detection", "whisper"]
+---
+
+Voice Activity Detection (VAD) pre-processes audio before it reaches Whisper. The VAD model identifies segments that contain speech, then only those segments are passed to Whisper for transcription. This reduces the amount of audio Whisper needs to process and can significantly speed up transcription when your audio contains long stretches of silence or non-speech noise.
+
+## How it works
+
+<Steps>
+  <Step title="Audio is passed to the VAD model">
+    The raw audio samples are processed by the VAD model, which assigns a speech probability to each frame.
+  </Step>
+  <Step title="Speech segments are extracted">
+    Frames above the configured probability threshold are grouped into speech segments. Silence and non-speech audio is discarded.
+  </Step>
+  <Step title="Whisper processes only speech">
+    The extracted speech segments are concatenated and passed to Whisper for transcription, skipping all non-speech portions.
+  </Step>
+</Steps>
+
+## Supported VAD models
+
+### Silero VAD
+
+[Silero VAD](https://github.com/snakers4/silero-vad) is a lightweight, accurate VAD model. It is the currently supported VAD backend in whisper.cpp.
+
+## Setup
+
+### Download the VAD model
+
+<Tabs>
+  <Tab title="Linux / macOS">
+    ```bash
+    ./models/download-vad-model.sh silero-v6.2.0
+    ```
+
+    Example output:
+
+    ```text
+    Downloading ggml model silero-v6.2.0 from 'https://huggingface.co/ggml-org/whisper-vad' ...
+    ggml-silero-v6.2.0.bin        100%[==============================================>] 864.35K  --.-KB/s    in 0.04s
+    Done! Model 'silero-v6.2.0' saved in '/path/models/ggml-silero-v6.2.0.bin'
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    .\models\download-vad-model.cmd silero-v6.2.0
+    ```
+
+    Example output:
+
+    ```text
+    Downloading vad model silero-v6.2.0...
+    Done! Model silero-v6.2.0 saved in C:\path\ggml-silero-v6.2.0.bin
+    ```
+  </Tab>
+</Tabs>
+
+To list all available VAD models, run the download script without any arguments.
+
+### Run transcription with VAD
+
+```bash
+./build/bin/whisper-cli \
+  --file ./samples/jfk.wav \
+  --model ./models/ggml-base.en.bin \
+  --vad \
+  --vad-model ./models/ggml-silero-v6.2.0.bin
+```
+
+## Manual model conversion
+
+You can convert the Silero VAD model yourself from Python instead of using the download script:
+
+```bash
+python3 -m venv venv && source venv/bin/activate
+pip install silero-vad
+python models/convert-silero-vad-to-ggml.py --output models/silero.bin
+```
+
+Example output:
+
+```text
+Saving GGML Silero-VAD model to models/silero-v6.2.0-ggml.bin
+```
+
+## VAD options
+
+The following CLI flags control VAD behavior. They correspond to the fields in the `whisper_vad_params` struct in `include/whisper.h`.
+
+<ParamField path="--vad-threshold" type="float" default="0.5">
+  Probability threshold for speech detection. Any frame with a speech probability above this value is classified as speech. Lower values are more sensitive (detect more speech); higher values require higher confidence before a frame is counted as speech.
+</ParamField>
+
+<ParamField path="--vad-min-speech-duration-ms" type="integer">
+  Minimum duration in milliseconds for a speech segment to be kept. Segments shorter than this value are discarded, which filters out brief noise or false positives.
+</ParamField>
+
+<ParamField path="--vad-min-silence-duration-ms" type="integer">
+  Minimum silence duration in milliseconds required to end a speech segment. Silence periods shorter than this value are absorbed into the surrounding speech segment rather than treated as a break.
+</ParamField>
+
+<ParamField path="--vad-max-speech-duration-s" type="float">
+  Maximum duration in seconds for a single speech segment. Segments longer than this are automatically split at silence points exceeding 98 ms to prevent excessively long inputs to Whisper.
+</ParamField>
+
+<ParamField path="--vad-speech-pad-ms" type="integer">
+  Padding in milliseconds added before and after each detected speech segment. This prevents speech from being clipped at the edges of detected segments.
+</ParamField>
+
+<ParamField path="--vad-samples-overlap" type="float">
+  Amount of audio in seconds to extend from each speech segment into the next (for example, `0.10` = 100 ms). This ensures speech is not cut off abruptly when segments are concatenated for Whisper processing.
+</ParamField>
+
+<Note>
+  VAD requires both the `--vad` flag and a model path via `--vad-model`. The model file must be in GGML format (either downloaded via the script or converted manually).
+</Note>

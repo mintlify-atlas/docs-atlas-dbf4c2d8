@@ -1,0 +1,204 @@
+---
+title: "Context initialization"
+description: "Load a Whisper model, configure hardware options, and manage context and state lifetime."
+keywords: ["whisper_context", "whisper_init", "whisper_free", "GPU", "context params"]
+---
+
+A `whisper_context` owns the model weights and (optionally) a default `whisper_state`. You create one at startup, keep it alive across inference calls, and free it when your application exits.
+
+## `whisper_context_params`
+
+Pass a `whisper_context_params` struct to any `whisper_init_*_with_params` function to control hardware selection and experimental features.
+
+```c
+struct whisper_context_params {
+    bool  use_gpu;
+    bool  flash_attn;
+    int   gpu_device;
+    bool  dtw_token_timestamps;
+    enum  whisper_alignment_heads_preset dtw_aheads_preset;
+    int   dtw_n_top;
+    struct whisper_aheads dtw_aheads;
+    size_t dtw_mem_size;
+};
+```
+
+Always start from `whisper_context_default_params()` and override only the fields you need.
+
+<ParamField path="use_gpu" type="bool" default="true">
+  Enable GPU acceleration when a supported backend (CUDA, Metal, Vulkan, etc.) is compiled in.
+</ParamField>
+
+<ParamField path="flash_attn" type="bool" default="false">
+  Use Flash Attention in the encoder and decoder. Reduces memory bandwidth at the cost of slightly different numerical behaviour.
+</ParamField>
+
+<ParamField path="gpu_device" type="int" default="0">
+  CUDA device index to use when `use_gpu` is true and multiple GPUs are present.
+</ParamField>
+
+<ParamField path="dtw_token_timestamps" type="bool" default="false">
+  **Experimental.** Enable token-level timestamps computed with Dynamic Time Warping (DTW). Requires `dtw_aheads_preset` or a custom `dtw_aheads` to be set.
+</ParamField>
+
+<ParamField path="dtw_aheads_preset" type="enum whisper_alignment_heads_preset" default="WHISPER_AHEADS_NONE">
+  Selects the set of attention heads used for DTW alignment. Built-in presets are available for every official model variant (`WHISPER_AHEADS_TINY_EN`, `WHISPER_AHEADS_BASE`, `WHISPER_AHEADS_SMALL_EN`, `WHISPER_AHEADS_MEDIUM`, `WHISPER_AHEADS_LARGE_V1/V2/V3/V3_TURBO`, etc.). Use `WHISPER_AHEADS_CUSTOM` together with `dtw_aheads` to specify heads manually.
+</ParamField>
+
+<ParamField path="dtw_n_top" type="int" default="-1">
+  When `dtw_aheads_preset` is `WHISPER_AHEADS_N_TOP_MOST`, selects how many top-most text layers to use.
+</ParamField>
+
+<ParamField path="dtw_aheads" type="struct whisper_aheads">
+  Custom attention head list used when `dtw_aheads_preset` is `WHISPER_AHEADS_CUSTOM`. Contains `n_heads` and a pointer to an array of `whisper_ahead` structs (`n_text_layer`, `n_head`).
+</ParamField>
+
+<ParamField path="dtw_mem_size" type="size_t">
+  Memory budget for the DTW computation buffer. Deprecated — will be removed in a future release.
+</ParamField>
+
+## `whisper_context_default_params`
+
+```c
+struct whisper_context_params whisper_context_default_params(void);
+```
+
+Returns a `whisper_context_params` with sensible defaults (`use_gpu = true`, `flash_attn = false`, `gpu_device = 0`, DTW disabled). Call this before setting any field.
+
+## Initialization functions
+
+### `whisper_init_from_file_with_params`
+
+```c
+struct whisper_context *whisper_init_from_file_with_params(
+    const char *path_model,
+    struct whisper_context_params params);
+```
+
+Loads a ggml model file from disk and allocates the full context including the default state. Returns `NULL` on failure.
+
+<ParamField path="path_model" type="const char *" required>
+  Path to the ggml model file (e.g. `"models/ggml-base.en.bin"`).
+</ParamField>
+
+<ParamField path="params" type="struct whisper_context_params" required>
+  Hardware and feature configuration. Start from `whisper_context_default_params()`.
+</ParamField>
+
+### `whisper_init_from_buffer_with_params`
+
+```c
+struct whisper_context *whisper_init_from_buffer_with_params(
+    void *buffer,
+    size_t buffer_size,
+    struct whisper_context_params params);
+```
+
+Loads a model from a memory buffer. Useful when the model is embedded in the binary or downloaded to RAM. Returns `NULL` on failure.
+
+<ParamField path="buffer" type="void *" required>
+  Pointer to a buffer containing the ggml model data.
+</ParamField>
+
+<ParamField path="buffer_size" type="size_t" required>
+  Size of `buffer` in bytes.
+</ParamField>
+
+<ParamField path="params" type="struct whisper_context_params" required>
+  Hardware and feature configuration.
+</ParamField>
+
+### `whisper_init_with_params`
+
+```c
+struct whisper_context *whisper_init_with_params(
+    struct whisper_model_loader *loader,
+    struct whisper_context_params params);
+```
+
+Loads a model via a custom reader. Implement the `whisper_model_loader` callbacks (`read`, `eof`, `close`) to stream the model from any source (network, encrypted storage, etc.).
+
+<ParamField path="loader" type="struct whisper_model_loader *" required>
+  Custom loader with `read`, `eof`, and `close` function pointers plus a `context` pointer passed back to each callback.
+</ParamField>
+
+<ParamField path="params" type="struct whisper_context_params" required>
+  Hardware and feature configuration.
+</ParamField>
+
+## Manual state allocation
+
+The `_no_state` variants of the init functions allocate the model weights but **do not** allocate a default `whisper_state`. You must call `whisper_init_state()` yourself before calling any inference function. This is useful when you want fine-grained control over how many states exist (e.g. one per thread).
+
+```c
+struct whisper_context *whisper_init_from_file_with_params_no_state(
+    const char *path_model,
+    struct whisper_context_params params);
+
+struct whisper_context *whisper_init_from_buffer_with_params_no_state(
+    void *buffer,
+    size_t buffer_size,
+    struct whisper_context_params params);
+
+struct whisper_context *whisper_init_with_params_no_state(
+    struct whisper_model_loader *loader,
+    struct whisper_context_params params);
+```
+
+### `whisper_init_state`
+
+```c
+struct whisper_state *whisper_init_state(struct whisper_context *ctx);
+```
+
+Allocates a new `whisper_state` attached to `ctx`. The returned pointer must be freed with `whisper_free_state()`. Use one state per thread to safely run parallel inference over the same model weights.
+
+## OpenVINO encoder
+
+```c
+int whisper_ctx_init_openvino_encoder(
+    struct whisper_context *ctx,
+    const char *model_path,
+    const char *device,
+    const char *cache_dir);
+```
+
+Replaces the encoder with an OpenVINO IR model for inference on Intel hardware. Pass `NULL` for `model_path` to derive the path automatically from the ggml model path. Returns `0` on success, `1` if OpenVINO is not compiled in.
+
+## Freeing resources
+
+```c
+void whisper_free(struct whisper_context *ctx);
+void whisper_free_state(struct whisper_state *state);
+void whisper_free_params(struct whisper_full_params *params);
+void whisper_free_context_params(struct whisper_context_params *params);
+```
+
+Call `whisper_free()` once per context when you are done with it. If you allocated extra states with `whisper_init_state()`, call `whisper_free_state()` for each one before calling `whisper_free()`. Use `whisper_free_params` / `whisper_free_context_params` only when you obtained the params struct via the `_by_ref` variants.
+
+## Deprecated functions
+
+<Warning>
+The following functions are deprecated. They do not accept `whisper_context_params` and therefore cannot enable GPU or Flash Attention. Replace them with their `_with_params` equivalents.
+</Warning>
+
+| Deprecated | Replacement |
+|---|---|
+| `whisper_init_from_file(path)` | `whisper_init_from_file_with_params(path, params)` |
+| `whisper_init_from_buffer(buf, size)` | `whisper_init_from_buffer_with_params(buf, size, params)` |
+| `whisper_init(loader)` | `whisper_init_with_params(loader, params)` |
+| `whisper_init_from_file_no_state(path)` | `whisper_init_from_file_with_params_no_state(path, params)` |
+| `whisper_init_from_buffer_no_state(buf, size)` | `whisper_init_from_buffer_with_params_no_state(buf, size, params)` |
+| `whisper_init_no_state(loader)` | `whisper_init_with_params_no_state(loader, params)` |
+
+**Migration:** construct a `whisper_context_params` with `whisper_context_default_params()` and pass it as the last argument.
+
+```c
+// Before (deprecated)
+struct whisper_context *ctx = whisper_init_from_file("models/ggml-base.en.bin");
+
+// After
+whisper_context_params cparams = whisper_context_default_params();
+struct whisper_context *ctx =
+    whisper_init_from_file_with_params("models/ggml-base.en.bin", cparams);
+```
